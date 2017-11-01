@@ -40,9 +40,6 @@ type Log struct {
 
 	/* other properties */
 	props []Property
-
-	/* internal */
-	complete bool
 }
 
 // Time returns the log timestamp

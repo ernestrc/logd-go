@@ -22,6 +22,7 @@ type Parser struct {
 	state
 	start, end int
 	raw        string
+	current    Log
 }
 
 func (p *Parser) handleNextKey(log *Log, r rune) {
@@ -181,32 +182,18 @@ func (p *Parser) next(log *Log, r rune) {
 func (p *Parser) Parse(chunk string, logs []Log) []Log {
 	p.raw += chunk
 
-	// provision one log if logs is empty or last log is fully parsed
-	l := len(logs) - 1
-	if l < 0 || logs[l].complete {
-		logs = append(logs, Log{props: make([]Property, 0)})
-		l++
-	}
-
 	for i, r := range p.raw {
 		switch r {
 		case '\n':
-			p.consumeCurrent(&logs[l])
+			p.consumeCurrent(&p.current)
 			p.start = i + 1
 			p.end = p.start
 			p.state = dateState
-			logs[l].complete = true
-			// provision one log if newline is not last character
-			logs = append(logs, Log{props: make([]Property, 0)})
-			l++
+			logs = append(logs, p.current)
+			p.current = Log{props: make([]Property, 0)}
 		default:
-			p.next(&logs[l], r)
+			p.next(&p.current, r)
 		}
-	}
-
-	// trim last log if it's incomplete and we're still in the first state
-	if l = len(logs) - 1; l >= 0 && !logs[l].complete && p.state == dateState {
-		logs = logs[:l]
 	}
 
 	p.raw = p.raw[p.start:]
