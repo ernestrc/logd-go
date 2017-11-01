@@ -17,13 +17,14 @@ const (
 	errorState
 )
 
-type parserState struct {
+// Parser holds the state of input text parsing
+type Parser struct {
 	state
 	start, end int
 	raw        string
 }
 
-func (p *parserState) handleNextKey(log *Log, r rune) {
+func (p *Parser) handleNextKey(log *Log, r rune) {
 	// TODO handle , and push to prev Property
 	switch r {
 	case ' ':
@@ -42,7 +43,7 @@ func (p *parserState) handleNextKey(log *Log, r rune) {
 	}
 }
 
-func (p *parserState) handleNextMultiKey(log *Log, r rune) {
+func (p *Parser) handleNextMultiKey(log *Log, r rune) {
 	switch r {
 	// TODO case ',':
 	//	p.consumeCurrent(log)
@@ -62,8 +63,11 @@ func (p *parserState) handleNextMultiKey(log *Log, r rune) {
 	}
 }
 
-func (p *parserState) consumeCurrent(log *Log) {
+func (p *Parser) consumeCurrent(log *Log) {
 	i := len(log.props) - 1
+	if i < 0 {
+		return
+	}
 	currProp := log.props[i]
 	var field *string
 	switch currProp.key {
@@ -84,7 +88,7 @@ func (p *parserState) consumeCurrent(log *Log) {
 	log.props = log.props[:i]
 }
 
-func (p *parserState) handleNextValue(log *Log, r rune) {
+func (p *Parser) handleNextValue(log *Log, r rune) {
 	switch r {
 	case ',':
 		p.consumeCurrent(log)
@@ -105,7 +109,7 @@ func (p *parserState) handleNextValue(log *Log, r rune) {
 	}
 }
 
-func (p *parserState) handleTransition(r rune) bool {
+func (p *Parser) handleTransition(r rune) bool {
 	switch r {
 	case '\t':
 		fallthrough
@@ -120,7 +124,7 @@ func (p *parserState) handleTransition(r rune) bool {
 	return false
 }
 
-func (p *parserState) handleNextHeader(prop *string, r rune) {
+func (p *Parser) handleNextHeader(prop *string, r rune) {
 	switch r {
 	case '\t':
 		fallthrough
@@ -134,7 +138,7 @@ func (p *parserState) handleNextHeader(prop *string, r rune) {
 	}
 }
 
-func (p *parserState) handleNextThread(log *Log, r rune) {
+func (p *Parser) handleNextThread(log *Log, r rune) {
 	switch r {
 	case ']':
 		p.end++
@@ -146,7 +150,7 @@ func (p *parserState) handleNextThread(log *Log, r rune) {
 	}
 }
 
-func (p *parserState) next(log *Log, r rune) {
+func (p *Parser) next(log *Log, r rune) {
 	switch p.state {
 	case dateState:
 		p.handleNextHeader(&log.date, r)
@@ -171,4 +175,62 @@ func (p *parserState) next(log *Log, r rune) {
 			p.next(log, r)
 		}
 	}
+}
+
+// Parse will append the logs parsed in chunk in logs slice and return the slice
+func (p *Parser) Parse(chunk string, logs []Log) []Log {
+	p.raw += chunk
+
+	// provision one log if logs is empty or last log is fully parsed
+	l := len(logs) - 1
+	if l < 0 || logs[l].complete {
+		logs = append(logs, Log{props: make([]Property, 0)})
+		l++
+	}
+
+	for i, r := range p.raw {
+		switch r {
+		case '\n':
+			p.consumeCurrent(&logs[l])
+			p.start = i + 1
+			p.end = p.start
+			p.state = dateState
+			logs[l].complete = true
+			// provision one log if newline is not last character
+			logs = append(logs, Log{props: make([]Property, 0)})
+			l++
+		default:
+			p.next(&logs[l], r)
+		}
+	}
+
+	// trim last log if it's incomplete and we're still in the first state
+	if l = len(logs) - 1; l >= 0 && !logs[l].complete && p.state == dateState {
+		logs = logs[:l]
+	}
+
+	p.raw = p.raw[p.start:]
+	p.start, p.end = 0, 0
+
+	return logs
+}
+
+// NewParser allocates storage for a Parser and initializes it with the given string
+func NewParser() (p *Parser) {
+	p = new(Parser)
+	p.Reset()
+	return
+}
+
+// Reset resets the Parser to use the given chunk
+func (p *Parser) Reset() {
+	p.state = dateState
+	p.start, p.end = 0, 0
+}
+
+// Parse parses raw text into structured logs
+func Parse(raw string) (logs []Log) {
+	p := NewParser()
+	logs = p.Parse(raw, make([]Log, 0))
+	return
 }

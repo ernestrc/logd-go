@@ -40,6 +40,9 @@ type Log struct {
 
 	/* other properties */
 	props []Property
+
+	/* internal */
+	complete bool
 }
 
 // Time returns the log timestamp
@@ -100,34 +103,4 @@ func (l *Log) Get(key string) (value string, ok bool) {
 // It does not contain any of the named properties.
 func (l *Log) Props() []Property {
 	return l.props
-}
-
-// Parse parses raw text into structured logs
-func Parse(raw string) (logs []Log) {
-	p := parserState{raw: raw}
-	logs = make([]Log, 0)
-	log := Log{props: make([]Property, 0)}
-
-	for i, r := range raw {
-		switch r {
-		case '\n':
-			if len(log.props) > 0 {
-				p.consumeCurrent(&log)
-			}
-			p.start = i + 1
-			p.end = p.start
-			logs = append(logs, log)
-			log = Log{props: make([]Property, 0)}
-			p.state = dateState
-		default:
-			p.next(&log, r)
-		}
-	}
-
-	if len(log.props) > 0 {
-		p.consumeCurrent(&log)
-	}
-	logs = append(logs, log)
-
-	return
 }

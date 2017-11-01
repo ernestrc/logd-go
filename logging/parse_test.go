@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-const log1 = "2017-09-07 14:54:39,474	DEBUG	[pool-5-thread-6]	control.RaptorHandler	PublisherCreateRequest: flow: Publish, step: Attempt, operation: CreatePublisher, traceId: Publish:Rumor:012ae1a5-3416-4458-b0c1-6eb3e0ab4c80"
-const log2 = "2017-09-07 14:54:39,474	DEBUG	[pool-5-thread-6]	control.RaptorHandler	PublisherCreateRequest: sessionId: 1_MX4xMDB-fjE1MDQ4MjEyNzAxMjR-WThtTVpEN0J2c1Z2TlJGcndTN1lpTExGfn4, flow: Publish, connectionId: f41973e5-b27c-49e4-bcaf-1d48b153683e, step: Attempt, publisherId: b4da82c4-cac5-4e13-b1dc-bb1f42b475dd, fromAddress: f41973e5-b27c-49e4-bcaf-1d48b153683e, projectId: 100, operation: CreatePublisher, traceId: Publish:Rumor:112ae1a5-3416-4458-b0c1-6eb3e0ab4c80, streamId: b4da82c4-cac5-4e13-b1dc-bb1f42b475dd, remoteIpAddress: 127.0.0.1, correlationId: b90232b5-3ee5-4c65-bb4e-29286d6a2771"
-const log3 = "2017-04-19 18:01:11,437     INFO [Test worker]    core.InstrumentationListener   DebugCallType "
+const log1 = "2017-09-07 14:54:39,474	DEBUG	[pool-5-thread-6]	control.RaptorHandler	PublisherCreateRequest: flow: Publish, step: Attempt, operation: CreatePublisher, traceId: Publish:Rumor:012ae1a5-3416-4458-b0c1-6eb3e0ab4c80\n"
+const log2 = "2017-09-07 14:54:39,474	DEBUG	[pool-5-thread-6]	control.RaptorHandler	PublisherCreateRequest: sessionId: 1_MX4xMDB-fjE1MDQ4MjEyNzAxMjR-WThtTVpEN0J2c1Z2TlJGcndTN1lpTExGfn4, flow: Publish, connectionId: f41973e5-b27c-49e4-bcaf-1d48b153683e, step: Attempt, publisherId: b4da82c4-cac5-4e13-b1dc-bb1f42b475dd, fromAddress: f41973e5-b27c-49e4-bcaf-1d48b153683e, projectId: 100, operation: CreatePublisher, traceId: Publish:Rumor:112ae1a5-3416-4458-b0c1-6eb3e0ab4c80, streamId: b4da82c4-cac5-4e13-b1dc-bb1f42b475dd, remoteIpAddress: 127.0.0.1, correlationId: b90232b5-3ee5-4c65-bb4e-29286d6a2771\n"
+const log3 = "2017-04-19 18:01:11,437     INFO [Test worker]    core.InstrumentationListener   DebugCallType \n"
 
 var expected1 = Log{
 	time:      "14:54:39,474",
@@ -120,13 +120,36 @@ func TestParserNothing(t *testing.T) {
 }
 
 func TestParserMulti(t *testing.T) {
-	input := fmt.Sprintf("%s\n%s\n%s", log1, log3, log2)
+	input := fmt.Sprintf("%s%s%s", log1, log3, log2)
 	expected := []Log{
 		expected1, expected3, expected2,
 	}
 
 	logs := Parse(input)
 	for i, log := range logs {
+		testEquals(t, log, expected[i])
+	}
+}
+
+func TestParserChunks(t *testing.T) {
+	input := fmt.Sprintf("%s%s%s", log1, log3, log2)
+	expected := []Log{
+		expected1, expected3, expected2,
+	}
+
+	chunks := make([]string, 3)
+	chunks[0] = input[:50]
+	chunks[1] = input[50:140]
+	chunks[2] = input[140:]
+
+	p := NewParser()
+	output := make([]Log, 0)
+
+	for _, chunk := range chunks {
+		output = p.Parse(chunk, output)
+	}
+
+	for i, log := range output {
 		testEquals(t, log, expected[i])
 	}
 }
@@ -152,20 +175,20 @@ func TestGetProp(t *testing.T) {
 
 // 3 log lines
 func BenchmarkParserSmallInput(b *testing.B) {
-	input := fmt.Sprintf("%s\n%s\n%s", log1, log3, log2)
+	input := fmt.Sprintf("%s%s%s", log1, log3, log2)
 	for i := 0; i < b.N; i++ {
 		Parse(input)
 	}
 }
 
-var benchBigInput = fmt.Sprintf("%s\n%s\n%s", log1, log3, log2)
+var benchBigInput = fmt.Sprintf("%s%s%s", log1, log3, log2)
 
 // 100MB worth of log lines
 const bigInputSize = 1024 * 1024 * 100
 
 func init() {
 	for len([]byte(benchBigInput)) < bigInputSize {
-		benchBigInput = fmt.Sprintf("%s\n%s", benchBigInput, benchBigInput)
+		benchBigInput = fmt.Sprintf("%s%s", benchBigInput, benchBigInput)
 	}
 	n := strings.Count(benchBigInput, "\n")
 	log.Printf("Benchmark big input=%d bytes; logs=%d\n", len([]byte(benchBigInput)), n)
