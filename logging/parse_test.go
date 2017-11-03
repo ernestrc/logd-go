@@ -184,7 +184,7 @@ func BenchmarkParserSmallInput(b *testing.B) {
 var benchBigInput = fmt.Sprintf("%s%s%s", log1, log3, log2)
 
 // 100MB worth of log lines
-const bigInputSize = 1024 * 1024 * 100
+const bigInputSize = 1000 * 1000 * 100
 
 func init() {
 	for len([]byte(benchBigInput)) < bigInputSize {
