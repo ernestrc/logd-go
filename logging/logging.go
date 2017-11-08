@@ -43,15 +43,15 @@ type Log struct {
 	/* header */
 	date   string
 	time   string
-	Level  string `json:"level"`
-	Thread string `json:"thread"`
-	Class  string `json:"class"`
+	Level  string
+	Thread string
+	Class  string
 
 	/* named properties */
-	TraceID   string `json:"traceId"`
-	Flow      string `json:"flow"`
-	Operation string `json:"operation"`
-	Step      string `json:"step"`
+	TraceID   string
+	Flow      string
+	Operation string
+	Step      string
 
 	/* other properties */
 	props []Property

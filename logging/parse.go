@@ -3,6 +3,7 @@ package logging
 type state uint8
 
 const (
+	// TODO should ignore any rune that is ^(1-9|:|,|.)
 	dateState state = iota
 	timeState
 	transitionLevelState
