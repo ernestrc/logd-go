@@ -19,16 +19,19 @@ func loadLua() *lua.State {
 	l := lua.NewState()
 	lua.OpenLibraries(l)
 
+	var err error
 	if *script == "" {
-		if err := lua.LoadString(l, `
+		err = lua.LoadString(l, `
 		function log (time, level, flow, operation, step, properties)
 		  print(string.format("%s\t%s\t%s", time, level, flow, operation, step))
-		end`); err != nil {
-			panic(err)
-		}
+		end`)
 	} else {
-		lua.LoadFile(l, *script, *scriptMode)
+		err = lua.LoadFile(l, *script, *scriptMode)
 	}
+	if err != nil {
+		panic(err)
+	}
+
 	l.SetGlobal("log")
 	return l
 }
