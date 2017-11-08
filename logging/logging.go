@@ -207,25 +207,38 @@ func (l *Log) Props() []Property {
 	return l.props
 }
 
-func (l *Log) String() (str string) {
-	str += fmt.Sprintf("%s %s\t%s\t%s\t%s", l.date, l.time, l.Level, l.Thread, l.Class)
-
+func (l *Log) serialize(template, templateSep, keySep, valueSep string) (str string) {
+	str = template
 	if len(l.props) == 0 {
 		return
 	}
 
 	first := l.props[0]
-	str += "\t"
+	str += templateSep
 	str += first.key
-	str += ": "
+	str += valueSep
 	str += first.value
 
 	for _, p := range l.props[1:] {
-		str += ", "
+		str += keySep
 		str += p.key
-		str += ": "
+		str += valueSep
 		str += p.value
 	}
 
 	return
+}
+
+func (l *Log) String() (str string) {
+	str += fmt.Sprintf("%s %s\t%s\t%s\t%s", l.date, l.time, l.Level, l.Thread, l.Class)
+	str = l.serialize(str, "\t", ", ", ": ")
+	return
+}
+
+// JSON serializes the log in JSON format
+func (l *Log) JSON() (str string) {
+	str += fmt.Sprintf("{\"timestamp\": \"%s %s\", \"level\": \"%s\", \"thread\": \"%s\", \"class\": \"%s", l.date, l.time, l.Level, l.Thread, l.Class)
+	str = l.serialize(str, `", "`, `", "`, `": "`)
+	str += `"}`
+	return str
 }

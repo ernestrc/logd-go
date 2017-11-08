@@ -1,6 +1,8 @@
 package logging
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestLogSet(t *testing.T) {
 	log := NewLog()
@@ -91,19 +93,30 @@ func TestLogRemove(t *testing.T) {
 	}
 }
 
-func TestLogString(t *testing.T) {
-	log := NewLog()
-	log.Thread = "[1234]"
-	log.Level = "INFO"
-	log.Class = "com.my.package.Class"
-	log.time = "111111,111"
-	log.date = "2017-24-11"
-	log.props = append(log.props, Property{key: "a", value: "1234"})
-	log.props = append(log.props, Property{key: "b", value: "xxx"})
+var serLog = NewLog()
 
+func init() {
+	serLog.Thread = "[1234]"
+	serLog.Level = "INFO"
+	serLog.Class = "com.my.package.Class"
+	serLog.time = "111111,111"
+	serLog.date = "2017-24-11"
+	serLog.props = append(serLog.props, Property{key: "a", value: "1234"})
+	serLog.props = append(serLog.props, Property{key: "b", value: "xxx"})
+}
+
+func TestLogString(t *testing.T) {
 	expected := "2017-24-11 111111,111	INFO	[1234]	com.my.package.Class	a: 1234, b: xxx"
 
-	if str := log.String(); str != expected {
+	if str := serLog.String(); str != expected {
+		t.Errorf("expected '%s' found '%s'", expected, str)
+	}
+}
+
+func TestLogJSON(t *testing.T) {
+	expected := `{"timestamp": "2017-24-11 111111,111", "level": "INFO", "thread": "[1234]", "class": "com.my.package.Class", "a": "1234", "b": "xxx"}`
+
+	if str := serLog.JSON(); str != expected {
 		t.Errorf("expected '%s' found '%s'", expected, str)
 	}
 }
