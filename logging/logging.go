@@ -207,6 +207,7 @@ func (l *Log) Props() []Property {
 	return l.props
 }
 
+// TODO should escape runes '\t', '\n', '"'
 func (l *Log) serialize(template, templateSep, keySep, valueSep string) (str string) {
 	str = template
 	if len(l.props) == 0 {
