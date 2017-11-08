@@ -19,6 +19,17 @@ const (
 	Event          = "Event"
 )
 
+const (
+	KeyFlow      string = "flow"
+	KeyOperation        = "operation"
+	KeyStep             = "step"
+	KeyTraceID          = "traceId"
+	KeyThread           = "thread"
+	KeyClass            = "class"
+	KeyTime             = "time"
+	KeyDate             = "date"
+)
+
 // Property represents an arbitrary key-value pair in a Log
 type Property struct {
 	key   string
@@ -94,20 +105,25 @@ func (l *Log) Step() string {
 // Remove will remove the passed key from the log properties.
 // It returns true if a property with the given key was found and removed.
 func (l *Log) Remove(key string) (found bool) {
-	last := len(l.props) - 1
-	if last < 0 {
-		return
-	}
-	for i, p := range l.props {
-		if p.key == key {
-			found = true
-			if i == last {
-				l.props = l.props[:i]
+	switch key {
+	case KeyFlow, KeyOperation, KeyStep, KeyTraceID, KeyThread, KeyClass, KeyTime, KeyDate:
+		found = l.Set(key, "")
+	default:
+		last := len(l.props) - 1
+		if last < 0 {
+			return
+		}
+		for i, p := range l.props {
+			if p.key == key {
+				found = true
+				if i == last {
+					l.props = l.props[:i]
+					return
+				}
+				copy(l.props[i:], l.props[i+1:])
+				l.props = l.props[:last]
 				return
 			}
-			copy(l.props[i:], l.props[i+1:])
-			l.props = l.props[:last]
-			return
 		}
 	}
 
@@ -116,25 +132,80 @@ func (l *Log) Remove(key string) (found bool) {
 
 // Set will upsert the value of passed key in the log properties.
 // It returns false if key was not found and property was added or true if it was upserted.
-func (l *Log) Set(key string, value string) bool {
-	for i, p := range l.props {
-		if p.key == key {
-			l.props[i].value = value
-			return true
+func (l *Log) Set(key string, value string) (upsert bool) {
+	switch key {
+	case KeyFlow:
+		upsert = l.flow != ""
+		l.flow = value
+	case KeyOperation:
+		upsert = l.operation != ""
+		l.operation = value
+	case KeyStep:
+		upsert = l.step != ""
+		l.step = value
+	case KeyTraceID:
+		upsert = l.traceID != ""
+		l.traceID = value
+	case KeyThread:
+		upsert = l.thread != ""
+		l.thread = value
+	case KeyClass:
+		upsert = l.class != ""
+		l.class = value
+	case KeyTime:
+		upsert = l.time != ""
+		l.time = value
+	case KeyDate:
+		upsert = l.date != ""
+		l.date = value
+	default:
+		for i, p := range l.props {
+			if p.key == key {
+				l.props[i].value = value
+				upsert = true
+				return
+			}
 		}
+		l.props = append(l.props, Property{key: key, value: value})
 	}
-	l.props = append(l.props, Property{key: key, value: value})
-	return false
+	return
 }
 
 // Get returns a the value of key set in the log properties or ok = false
 // if there's no value set for that key
 func (l *Log) Get(key string) (value string, ok bool) {
-	for _, p := range l.props {
-		if p.key == key {
-			ok = true
-			value = p.value
-			return
+	switch key {
+	case KeyFlow:
+		ok = l.flow != ""
+		value = l.flow
+	case KeyOperation:
+		ok = l.operation != ""
+		value = l.operation
+	case KeyStep:
+		ok = l.step != ""
+		value = l.step
+	case KeyTraceID:
+		ok = l.traceID != ""
+		value = l.traceID
+	case KeyThread:
+		ok = l.thread != ""
+		value = l.thread
+	case KeyClass:
+		ok = l.class != ""
+		value = l.class
+	case KeyTime:
+		ok = l.time != ""
+		value = l.time
+	case KeyDate:
+		ok = l.date != ""
+		value = l.date
+	default:
+		for _, p := range l.props {
+			if p.key == key {
+				ok = true
+				value = p.value
+				return
+			}
 		}
 	}
 

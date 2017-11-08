@@ -20,6 +20,11 @@ func TestLogSet(t *testing.T) {
 		t.Errorf("value not correct: %+v", v)
 	}
 
+	log.Set("flow", "xxx")
+	if v := log.Flow(); v != "xxx" {
+		t.Errorf("flow not correct: %+v", v)
+	}
+
 	if l := len(log.Props()); l != 2 {
 		t.Errorf("expected length of properties to be 2 found: %d", l)
 	}
@@ -36,6 +41,15 @@ func TestLogGet(t *testing.T) {
 	if v, ok := log.Get("b"); v != "" || ok {
 		t.Errorf("expected ''/false found '%s'/%t", v, ok)
 	}
+
+	if v, ok := log.Get("flow"); ok || v != "" {
+		t.Errorf("flow not correct: %+v", v)
+	}
+
+	log.flow = "xxx"
+	if v, ok := log.Get("flow"); !ok || v != "xxx" {
+		t.Errorf("flow not correct: %+v", v)
+	}
 }
 
 func TestLogRemove(t *testing.T) {
@@ -48,6 +62,15 @@ func TestLogRemove(t *testing.T) {
 
 	if ok := log.Remove("a"); ok || len(log.props) > 0 {
 		t.Errorf("expected false/len=0 found %t/%d", ok, len(log.props))
+	}
+
+	if removed := log.Remove("flow"); removed {
+		t.Errorf("flow removed but it was empty")
+	}
+
+	log.flow = "xxx"
+	if removed := log.Remove("flow"); !removed || log.flow != "" {
+		t.Errorf("flow not removed: removed=%t/'%s'", removed, log.flow)
 	}
 }
 

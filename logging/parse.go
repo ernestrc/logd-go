@@ -72,13 +72,13 @@ func (p *Parser) consumeCurrent(log *Log) {
 	currProp := log.props[i]
 	var field *string
 	switch currProp.key {
-	case "step":
+	case KeyStep:
 		field = &log.step
-	case "flow":
+	case KeyFlow:
 		field = &log.flow
-	case "operation":
+	case KeyOperation:
 		field = &log.operation
-	case "traceId":
+	case KeyTraceID:
 		field = &log.traceID
 	default:
 		log.props[i] = Property{currProp.key, p.raw[p.start:p.end]}
