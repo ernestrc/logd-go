@@ -2,6 +2,7 @@ package logging
 
 import (
 	"fmt"
+	"strings"
 )
 
 const (
@@ -28,6 +29,7 @@ const (
 	KeyClass            = "class"
 	KeyTime             = "time"
 	KeyDate             = "date"
+	KeyTimestamp        = "timestamp"
 )
 
 // Property represents an arbitrary key-value pair in a Log
@@ -62,9 +64,24 @@ func NewLog() *Log {
 	return l
 }
 
-// Time returns the log timestamp
-func (l *Log) Time() string {
+// Reset resets all log properties to their zero values
+func (l *Log) Reset() {
+	*l = Log{props: l.props[:0]}
+}
+
+// Timestamp returns the log timestamp
+func (l *Log) Timestamp() string {
 	return fmt.Sprintf("%s %s", l.date, l.time)
+}
+
+// Date returns the log date
+func (l *Log) Date() string {
+	return l.date
+}
+
+// Time returns the log time
+func (l *Log) Time() string {
+	return l.time
 }
 
 // Level returns the log level
@@ -106,7 +123,7 @@ func (l *Log) Step() string {
 // It returns true if a property with the given key was found and removed.
 func (l *Log) Remove(key string) (found bool) {
 	switch key {
-	case KeyFlow, KeyOperation, KeyStep, KeyTraceID, KeyThread, KeyClass, KeyTime, KeyDate:
+	case KeyFlow, KeyOperation, KeyStep, KeyTraceID, KeyThread, KeyClass, KeyTime, KeyDate, KeyTimestamp:
 		found = l.Set(key, "")
 	default:
 		last := len(l.props) - 1
@@ -134,6 +151,20 @@ func (l *Log) Remove(key string) (found bool) {
 // It returns false if key was not found and property was added or true if it was upserted.
 func (l *Log) Set(key string, value string) (upsert bool) {
 	switch key {
+	case KeyTimestamp:
+		upsert = l.date != "" || l.time != ""
+		// special case, set both time and date to zero values
+		if value == "" {
+			l.date = ""
+			l.time = ""
+			break
+		}
+		o := strings.Split(value, " ")
+		if len(o) != 2 {
+			panic(fmt.Sprintf("invalid timestamp format: %s", value))
+		}
+		l.date = o[0]
+		l.time = o[1]
 	case KeyFlow:
 		upsert = l.flow != ""
 		l.flow = value
@@ -175,6 +206,9 @@ func (l *Log) Set(key string, value string) (upsert bool) {
 // if there's no value set for that key
 func (l *Log) Get(key string) (value string, ok bool) {
 	switch key {
+	case KeyTimestamp:
+		value = l.Timestamp()
+		ok = value != ""
 	case KeyFlow:
 		ok = l.flow != ""
 		value = l.flow
@@ -219,7 +253,7 @@ func (l *Log) Props() []Property {
 }
 
 func (l *Log) String() (str string) {
-	str += fmt.Sprintf("%s\t%s\t%s\t%s\t%s", l.date, l.time, l.level, l.thread, l.class)
+	str += fmt.Sprintf("%s %s\t%s\t%s\t%s", l.date, l.time, l.level, l.thread, l.class)
 
 	if len(l.props) == 0 {
 		return

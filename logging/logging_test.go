@@ -25,6 +25,11 @@ func TestLogSet(t *testing.T) {
 		t.Errorf("flow not correct: %+v", v)
 	}
 
+	log.Set("timestamp", "a b")
+	if time, date, timestamp := log.Time(), log.Date(), log.Timestamp(); date != "a" || time != "b" || timestamp != "a b" {
+		t.Errorf("timestamp not correct: %s", timestamp)
+	}
+
 	if l := len(log.Props()); l != 2 {
 		t.Errorf("expected length of properties to be 2 found: %d", l)
 	}
@@ -50,6 +55,12 @@ func TestLogGet(t *testing.T) {
 	if v, ok := log.Get("flow"); !ok || v != "xxx" {
 		t.Errorf("flow not correct: %+v", v)
 	}
+
+	log.date = "a"
+	log.time = "b"
+	if v, ok := log.Get("timestamp"); !ok || v != "a b" {
+		t.Errorf("timestamp not correct: %+v", v)
+	}
 }
 
 func TestLogRemove(t *testing.T) {
@@ -72,6 +83,12 @@ func TestLogRemove(t *testing.T) {
 	if removed := log.Remove("flow"); !removed || log.flow != "" {
 		t.Errorf("flow not removed: removed=%t/'%s'", removed, log.flow)
 	}
+
+	log.date = "a"
+	log.time = "b"
+	if removed := log.Remove("timestamp"); !removed || log.time != "" || log.date != "" {
+		t.Errorf("timestamp not removed: removed=%t/'%s\t%s'", removed, log.date, log.time)
+	}
 }
 
 func TestLogString(t *testing.T) {
@@ -84,7 +101,7 @@ func TestLogString(t *testing.T) {
 	log.props = append(log.props, Property{key: "a", value: "1234"})
 	log.props = append(log.props, Property{key: "b", value: "xxx"})
 
-	expected := "2017-24-11	111111,111	INFO	[1234]	com.my.package.Class	a: 1234, b: xxx"
+	expected := "2017-24-11 111111,111	INFO	[1234]	com.my.package.Class	a: 1234, b: xxx"
 
 	if str := log.String(); str != expected {
 		t.Errorf("expected '%s' found '%s'", expected, str)
