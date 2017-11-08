@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"io"
 	"os"
 )
 
@@ -12,7 +11,7 @@ var newLine = []byte{'\n'}
 // StdoutLogWriter is a buffered stdout Writer that writes data in chunks
 // separated by newlines
 type StdoutLogWriter struct {
-	writer io.Writer
+	writer *bufio.Writer
 }
 
 func NewStdoutLogWriter() *StdoutLogWriter {
@@ -29,4 +28,8 @@ func (w *StdoutLogWriter) Write(b []byte) (n int, err error) {
 	_, err = w.writer.Write(newLine)
 	n++
 	return
+}
+
+func (w *StdoutLogWriter) Flush() error {
+	return w.writer.Flush()
 }

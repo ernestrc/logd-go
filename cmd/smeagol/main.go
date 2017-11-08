@@ -11,6 +11,11 @@ import (
 	"github.com/opentok/blue/logging"
 )
 
+type fwriter interface {
+	io.Writer
+	Flush() error
+}
+
 type logWriter func(io.Writer, *logging.Log)
 
 var validOutputModes = [1]string{"stdout"}
@@ -24,12 +29,12 @@ var output = flag.String("O", "stdout", fmt.Sprintf("Output mode. Available mode
 // default lua script
 var noop = "function log (timestamp, level, flow, operation, step, logptr)\nend"
 
-func getOutput() (o io.Writer) {
+func getIoWriter() (o fwriter) {
 	switch *output {
 	case "stdout":
 		o = stdoutLogWriter
 	default:
-		fmt.Printf("only %v are allowd as modes", validOutputModes)
+		fmt.Fprintf(os.Stderr, "only %v are allowd as modes", validOutputModes)
 		os.Exit(1)
 	}
 	return
@@ -44,14 +49,14 @@ func jsonWrite(o io.Writer, log *logging.Log) {
 	o.Write([]byte(b))
 }
 
-func getWriter() logWriter {
+func getLogWriter() logWriter {
 	switch *outputFormat {
 	case "otlog":
 		return logWrite
 	case "JSON", "json":
 		return jsonWrite
 	default:
-		fmt.Printf("invalid output format '%s'. Available: %v", *outputFormat, validOutputFormats)
+		fmt.Fprintf(os.Stderr, "invalid output format '%s'. Available: %v", *outputFormat, validOutputFormats)
 		os.Exit(1)
 	}
 
@@ -148,7 +153,7 @@ func loadLuaRuntime() *lua.State {
 		err = lua.LoadFile(l, *script, *scriptMode)
 	}
 	if err != nil {
-		fmt.Printf("there was an error when loading script: %s\n", err)
+		fmt.Fprintf(os.Stderr, "there was an error when loading script: %s\n", err)
 		os.Exit(1)
 	}
 
@@ -161,16 +166,18 @@ func main() {
 
 	p := logging.NewParser()
 	reader := bufio.NewReader(os.Stdin)
-	write := getWriter()
-	writer := getOutput()
+	writer := getLogWriter()
+	ioWriter := getIoWriter()
+	defer ioWriter.Flush()
 	logs := make([]logging.Log, 0)
 	l := loadLuaRuntime()
+
 	var buf [64 * 1000 * 1000]byte
 	for {
 		n, err := reader.Read(buf[:])
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "%s", err)
+			break
 		}
 		logs = p.Parse(string(buf[:n]), logs)
 		for _, log := range logs {
@@ -182,7 +189,7 @@ func main() {
 			l.PushString(log.Step)
 			l.PushUserData(&log)
 			l.Call(6, 0)
-			write(writer, &log)
+			writer(ioWriter, &log)
 		}
 		logs = logs[:0]
 	}
