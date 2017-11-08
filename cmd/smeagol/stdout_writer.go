@@ -2,25 +2,24 @@ package main
 
 import (
 	"bufio"
-	"os"
+	"io"
 )
 
-var stdoutLogWriter = NewStdoutLogWriter()
 var newLine = []byte{'\n'}
 
-// StdoutLogWriter is a buffered stdout Writer that writes data in chunks
+// LogWriter is a buffered stdout Writer that writes data in chunks
 // separated by newlines
-type StdoutLogWriter struct {
+type LogWriter struct {
 	writer *bufio.Writer
 }
 
-func NewStdoutLogWriter() *StdoutLogWriter {
-	w := new(StdoutLogWriter)
-	w.writer = bufio.NewWriter(os.Stdout)
+func NewLogWriter(writer io.Writer) *LogWriter {
+	w := new(LogWriter)
+	w.writer = bufio.NewWriter(writer)
 	return w
 }
 
-func (w *StdoutLogWriter) Write(b []byte) (n int, err error) {
+func (w *LogWriter) Write(b []byte) (n int, err error) {
 	n, err = w.writer.Write(b)
 	if err != nil {
 		return
@@ -30,6 +29,6 @@ func (w *StdoutLogWriter) Write(b []byte) (n int, err error) {
 	return
 }
 
-func (w *StdoutLogWriter) Flush() error {
+func (w *LogWriter) Flush() error {
 	return w.writer.Flush()
 }
