@@ -9,7 +9,27 @@ import (
 )
 
 // default lua script
-var noop = "function map (timestamp, level, flow, operation, step, logptr)\nreturn logptr\nend"
+var noop = "function map (logptr)\nreturn logptr\nend"
+
+const getLineQuery = "nSl"
+
+// bubble up a lua error which translates into a panic of the program
+func luaPanic(l *lua.State, tmpl string, args ...interface{}) {
+	f, ok := lua.Stack(l, 0)
+	if !ok {
+		panic("could not get lua script current frame")
+	}
+	var d lua.Debug
+	if d, ok = lua.Info(l, getLineQuery, f); !ok {
+		panic("could not get lua frame debug info")
+	}
+
+	err := fmt.Sprintf("%s: %+v", fmt.Sprintf(tmpl, args...), d)
+	l.PushString(err)
+
+	// panic
+	l.Error()
+}
 
 func popLogPtr(l *lua.State, i int, fn string) *logging.Log {
 	j := i * -1
@@ -18,8 +38,7 @@ func popLogPtr(l *lua.State, i int, fn string) *logging.Log {
 		if l.IsNil(j) {
 			return nil
 		}
-		l.PushString(fmt.Sprintf("%d return value must be a pointer to a logging.Log structure in call to builtin '%s' function", j, fn))
-		l.Error()
+		luaPanic(l, "%d return value must be a pointer to a logging.Log structure in call to builtin '%s' function: found %s", j, fn, l.TypeOf(i))
 		return nil
 	}
 	ifc := l.ToUserData(j)
@@ -27,8 +46,7 @@ func popLogPtr(l *lua.State, i int, fn string) *logging.Log {
 
 	log, ok := ifc.(*logging.Log)
 	if !ok {
-		l.PushString(fmt.Sprintf("%d return value must be a pointer to a logging.Log structure in call to builtin '%s' function: %+v", j, fn, ifc))
-		l.Error()
+		luaPanic(l, "%d return value must be a pointer to a logging.Log structure in call to builtin '%s' function: %+v", j, fn, ifc)
 	}
 
 	return log
@@ -37,8 +55,7 @@ func popLogPtr(l *lua.State, i int, fn string) *logging.Log {
 func getArgLogPtr(l *lua.State, i int, fn string) *logging.Log {
 	log, ok := l.ToUserData(i).(*logging.Log)
 	if !ok {
-		l.PushString(fmt.Sprintf("%d argument must be a pointer to a logging.Log structure in call to builtin '%s' function", i, fn))
-		l.Error()
+		luaPanic(l, "%d argument must be a pointer to a logging.Log structure in call to builtin '%s' function: found %s", i, fn, l.TypeOf(i))
 	}
 	return log
 }
@@ -46,8 +63,7 @@ func getArgLogPtr(l *lua.State, i int, fn string) *logging.Log {
 func getArgString(l *lua.State, i int, fn string) string {
 	key, ok := l.ToString(i)
 	if !ok {
-		l.PushString(fmt.Sprintf("%d argument must be a string in call to builtin '%s' function", i, fn))
-		l.Error()
+		luaPanic(l, "%d argument must be a string in call to builtin '%s' function: found %s", i, fn, l.TypeOf(i))
 	}
 	return key
 }
