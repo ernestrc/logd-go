@@ -11,7 +11,27 @@ import (
 	"github.com/opentok/blue/logging"
 )
 
-var tick = flag.Int("T", 1000, "duration of input buffering period in Microseconds [default: 1000us]")
+var tick = flag.Int("T", 1000, "duration of input buffering period in Microseconds. Default is 1000us")
+var script = flag.String("S", "", "Lua script that implements function log (time, level, flow, operation, step, properties). Defaults to printing a digest of the logs")
+var scriptMode = flag.String("M", "bt", "Lua script load mode which controls whether the chunk can be text or binary (that is, a precompiled chunk). It may be the string 'b' (only binary chunks), 't' (only text chunks), or 'bt' (both binary and text). The default is 'bt'.")
+
+func loadLua() *lua.State {
+	l := lua.NewState()
+	lua.OpenLibraries(l)
+
+	if *script == "" {
+		if err := lua.LoadString(l, `
+		function log (time, level, flow, operation, step, properties)
+		  print(string.format("%s\t%s\t%s", time, level, flow, operation, step))
+		end`); err != nil {
+			panic(err)
+		}
+	} else {
+		lua.LoadFile(l, *script, *scriptMode)
+	}
+	l.SetGlobal("log")
+	return l
+}
 
 func main() {
 	flag.Parse()
@@ -21,20 +41,10 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	ticker := time.NewTicker(tick)
 	logs := make([]logging.Log, 0)
-
-	l := lua.NewState()
-	lua.OpenLibraries(l)
-	// lua.Require(
-	// lua.PackageOpen(l)
-	if err := lua.LoadString(l, `
-    function log (time, level, flow, operation, step, properties)
-      print(l)
-    end`); err != nil {
-		panic(err)
-	}
-
+	l := loadLua()
 	var buf [64 * 1000 * 1000]byte
 	for {
+		// time-based input buffering
 		<-ticker.C
 		n, err := reader.Read(buf[:])
 		if err != nil {
