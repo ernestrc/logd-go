@@ -21,7 +21,7 @@ type logWriter func(io.Writer, *logging.Log)
 var validOutputModes = [3]string{"stdout", "stderr", "null"}
 var validOutputFormats = [2]string{"JSON", "otlog"}
 
-var tScript = flag.String("T", "", "Lua script that implements transformation function log (time, level, flow, operation, step, logptr)")
+var script = flag.String("S", "", "Lua script that implements transformation function map (time, level, flow, operation, step, logptr)")
 var scriptMode = flag.String("M", "bt", "Lua script load mode which controls whether the chunk can be text or binary (that is, a precompiled chunk). It may be the string 'b' (only binary chunks), 't' (only text chunks), or 'bt' (both binary and text). The default is 'bt'")
 var outputFormat = flag.String("F", "otlog", fmt.Sprintf("Output format of the logs. Default is 'otlog' which the same format than the input of the log. Other valid formats: %v", validOutputFormats))
 var output = flag.String("O", "stdout", fmt.Sprintf("Output mode. Available modes: %v. Default is 'stdout'", validOutputModes))
@@ -84,15 +84,18 @@ func main() {
 		}
 		logs = p.Parse(string(buf[:n]), logs)
 		for _, log := range logs {
-			l.Global("log")
+			l.Global("map")
 			l.PushString(log.Timestamp())
 			l.PushString(log.Level)
 			l.PushString(log.Flow)
 			l.PushString(log.Operation)
 			l.PushString(log.Step)
 			l.PushUserData(&log)
-			l.Call(6, 0)
-			writer(ioWriter, &log)
+			l.Call(6, 1)
+			ptr := popLogPtr(l, 1, "map")
+			if ptr != nil {
+				writer(ioWriter, ptr)
+			}
 		}
 		logs = logs[:0]
 	}

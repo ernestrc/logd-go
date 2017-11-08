@@ -1,4 +1,4 @@
-function log (timestamp, level, flow, operation, step, logptr)
+function map (timestamp, level, flow, operation, step, logptr)
 	-- example usage of "get" builtin
 	err = get(logptr, "err")
 	-- example usage of "reset" builtin
@@ -19,4 +19,7 @@ function log (timestamp, level, flow, operation, step, logptr)
 	set(logptr, "step", step)
 
 	set(logptr, "luaRocks", "true")
+
+	-- if return nil, log will be discarded
+	return logptr
 end

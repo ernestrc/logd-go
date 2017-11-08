@@ -9,7 +9,30 @@ import (
 )
 
 // default lua script
-var noop = "function log (timestamp, level, flow, operation, step, logptr)\nend"
+var noop = "function map (timestamp, level, flow, operation, step, logptr)\nreturn logptr\nend"
+
+func popLogPtr(l *lua.State, i int, fn string) *logging.Log {
+	j := i * -1
+	if !l.IsUserData(j) {
+		// returning nil signals discarding the log
+		if l.IsNil(j) {
+			return nil
+		}
+		l.PushString(fmt.Sprintf("%d return value must be a pointer to a logging.Log structure in call to builtin '%s' function", j, fn))
+		l.Error()
+		return nil
+	}
+	ifc := l.ToUserData(j)
+	l.Pop(i)
+
+	log, ok := ifc.(*logging.Log)
+	if !ok {
+		l.PushString(fmt.Sprintf("%d return value must be a pointer to a logging.Log structure in call to builtin '%s' function: %+v", j, fn, ifc))
+		l.Error()
+	}
+
+	return log
+}
 
 func getArgLogPtr(l *lua.State, i int, fn string) *logging.Log {
 	log, ok := l.ToUserData(i).(*logging.Log)
@@ -95,16 +118,16 @@ func loadLuaRuntime() *lua.State {
 	loadUtils(l)
 
 	var err error
-	if *tScript == "" {
+	if *script == "" {
 		err = lua.LoadString(l, noop)
 	} else {
-		err = lua.LoadFile(l, *tScript, *scriptMode)
+		err = lua.LoadFile(l, *script, *scriptMode)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "there was an error when loading script: %s\n", err)
 		os.Exit(1)
 	}
 
-	l.SetGlobal("log")
+	l.SetGlobal("map")
 	return l
 }
