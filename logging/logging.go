@@ -44,6 +44,13 @@ type Log struct {
 	props []Property
 }
 
+// NewLog allocates storage and initializes a Log structure
+func NewLog() *Log {
+	l := new(Log)
+	l.props = make([]Property, 0)
+	return l
+}
+
 // Time returns the log timestamp
 func (l *Log) Time() string {
 	return fmt.Sprintf("%s %s", l.date, l.time)
@@ -82,6 +89,42 @@ func (l *Log) Operation() string {
 // Step returns the log step
 func (l *Log) Step() string {
 	return l.step
+}
+
+// Remove will remove the passed key from the log properties.
+// It returns true if a property with the given key was found and removed.
+func (l *Log) Remove(key string) (found bool) {
+	last := len(l.props) - 1
+	if last < 0 {
+		return
+	}
+	for i, p := range l.props {
+		if p.key == key {
+			found = true
+			if i == last {
+				l.props = l.props[:i]
+				return
+			}
+			copy(l.props[i:], l.props[i+1:])
+			l.props = l.props[:last]
+			return
+		}
+	}
+
+	return
+}
+
+// Set will upsert the value of passed key in the log properties.
+// It returns false if key was not found and property was added or true if it was upserted.
+func (l *Log) Set(key string, value string) bool {
+	for i, p := range l.props {
+		if p.key == key {
+			l.props[i].value = value
+			return true
+		}
+	}
+	l.props = append(l.props, Property{key: key, value: value})
+	return false
 }
 
 // Get returns a the value of key set in the log properties or ok = false
