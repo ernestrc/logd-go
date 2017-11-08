@@ -73,13 +73,13 @@ func (p *Parser) consumeCurrent(log *Log) {
 	var field *string
 	switch currProp.key {
 	case KeyStep:
-		field = &log.step
+		field = &log.Step
 	case KeyFlow:
-		field = &log.flow
+		field = &log.Flow
 	case KeyOperation:
-		field = &log.operation
+		field = &log.Operation
 	case KeyTraceID:
-		field = &log.traceID
+		field = &log.TraceID
 	default:
 		log.props[i] = Property{currProp.key, p.raw[p.start:p.end]}
 		return
@@ -143,7 +143,7 @@ func (p *Parser) handleNextThread(log *Log, r rune) {
 	switch r {
 	case ']':
 		p.end++
-		log.thread = p.raw[p.start:p.end]
+		log.Thread = p.raw[p.start:p.end]
 		p.start = p.end
 		p.state++
 	default:
@@ -158,11 +158,11 @@ func (p *Parser) next(log *Log, r rune) {
 	case timeState:
 		p.handleNextHeader(&log.time, r)
 	case levelState:
-		p.handleNextHeader(&log.level, r)
+		p.handleNextHeader(&log.Level, r)
 	case threadState:
 		p.handleNextThread(log, r)
 	case classState:
-		p.handleNextHeader(&log.class, r)
+		p.handleNextHeader(&log.Class, r)
 	case keyState:
 		p.handleNextKey(log, r)
 	case valueState:

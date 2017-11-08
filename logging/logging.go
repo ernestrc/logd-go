@@ -43,15 +43,15 @@ type Log struct {
 	/* header */
 	date   string
 	time   string
-	level  string
-	thread string
-	class  string
+	Level  string `json:"level"`
+	Thread string `json:"thread"`
+	Class  string `json:"class"`
 
 	/* named properties */
-	traceID   string
-	flow      string
-	operation string
-	step      string
+	TraceID   string `json:"traceId"`
+	Flow      string `json:"flow"`
+	Operation string `json:"operation"`
+	Step      string `json:"step"`
 
 	/* other properties */
 	props []Property
@@ -72,51 +72,6 @@ func (l *Log) Reset() {
 // Timestamp returns the log timestamp
 func (l *Log) Timestamp() string {
 	return fmt.Sprintf("%s %s", l.date, l.time)
-}
-
-// Date returns the log date
-func (l *Log) Date() string {
-	return l.date
-}
-
-// Time returns the log time
-func (l *Log) Time() string {
-	return l.time
-}
-
-// Level returns the log level
-func (l *Log) Level() string {
-	return l.level
-}
-
-// Thread returns the log thread
-func (l *Log) Thread() string {
-	return l.thread
-}
-
-// Class returns the log class
-func (l *Log) Class() string {
-	return l.class
-}
-
-// TraceID returns the log traceID
-func (l *Log) TraceID() string {
-	return l.traceID
-}
-
-// Flow returns the log flow
-func (l *Log) Flow() string {
-	return l.flow
-}
-
-// Operation returns the log operation
-func (l *Log) Operation() string {
-	return l.operation
-}
-
-// Step returns the log step
-func (l *Log) Step() string {
-	return l.step
 }
 
 // Remove will remove the passed key from the log properties.
@@ -166,23 +121,23 @@ func (l *Log) Set(key string, value string) (upsert bool) {
 		l.date = o[0]
 		l.time = o[1]
 	case KeyFlow:
-		upsert = l.flow != ""
-		l.flow = value
+		upsert = l.Flow != ""
+		l.Flow = value
 	case KeyOperation:
-		upsert = l.operation != ""
-		l.operation = value
+		upsert = l.Operation != ""
+		l.Operation = value
 	case KeyStep:
-		upsert = l.step != ""
-		l.step = value
+		upsert = l.Step != ""
+		l.Step = value
 	case KeyTraceID:
-		upsert = l.traceID != ""
-		l.traceID = value
+		upsert = l.TraceID != ""
+		l.TraceID = value
 	case KeyThread:
-		upsert = l.thread != ""
-		l.thread = value
+		upsert = l.Thread != ""
+		l.Thread = value
 	case KeyClass:
-		upsert = l.class != ""
-		l.class = value
+		upsert = l.Class != ""
+		l.Class = value
 	case KeyTime:
 		upsert = l.time != ""
 		l.time = value
@@ -210,23 +165,23 @@ func (l *Log) Get(key string) (value string, ok bool) {
 		value = l.Timestamp()
 		ok = value != ""
 	case KeyFlow:
-		ok = l.flow != ""
-		value = l.flow
+		ok = l.Flow != ""
+		value = l.Flow
 	case KeyOperation:
-		ok = l.operation != ""
-		value = l.operation
+		ok = l.Operation != ""
+		value = l.Operation
 	case KeyStep:
-		ok = l.step != ""
-		value = l.step
+		ok = l.Step != ""
+		value = l.Step
 	case KeyTraceID:
-		ok = l.traceID != ""
-		value = l.traceID
+		ok = l.TraceID != ""
+		value = l.TraceID
 	case KeyThread:
-		ok = l.thread != ""
-		value = l.thread
+		ok = l.Thread != ""
+		value = l.Thread
 	case KeyClass:
-		ok = l.class != ""
-		value = l.class
+		ok = l.Class != ""
+		value = l.Class
 	case KeyTime:
 		ok = l.time != ""
 		value = l.time
@@ -253,7 +208,7 @@ func (l *Log) Props() []Property {
 }
 
 func (l *Log) String() (str string) {
-	str += fmt.Sprintf("%s %s\t%s\t%s\t%s", l.date, l.time, l.level, l.thread, l.class)
+	str += fmt.Sprintf("%s %s\t%s\t%s\t%s", l.date, l.time, l.Level, l.Thread, l.Class)
 
 	if len(l.props) == 0 {
 		return

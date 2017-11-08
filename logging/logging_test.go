@@ -21,12 +21,12 @@ func TestLogSet(t *testing.T) {
 	}
 
 	log.Set("flow", "xxx")
-	if v := log.Flow(); v != "xxx" {
+	if v := log.Flow; v != "xxx" {
 		t.Errorf("flow not correct: %+v", v)
 	}
 
 	log.Set("timestamp", "a b")
-	if time, date, timestamp := log.Time(), log.Date(), log.Timestamp(); date != "a" || time != "b" || timestamp != "a b" {
+	if time, date, timestamp := log.time, log.date, log.Timestamp(); date != "a" || time != "b" || timestamp != "a b" {
 		t.Errorf("timestamp not correct: %s", timestamp)
 	}
 
@@ -51,7 +51,7 @@ func TestLogGet(t *testing.T) {
 		t.Errorf("flow not correct: %+v", v)
 	}
 
-	log.flow = "xxx"
+	log.Flow = "xxx"
 	if v, ok := log.Get("flow"); !ok || v != "xxx" {
 		t.Errorf("flow not correct: %+v", v)
 	}
@@ -79,9 +79,9 @@ func TestLogRemove(t *testing.T) {
 		t.Errorf("flow removed but it was empty")
 	}
 
-	log.flow = "xxx"
-	if removed := log.Remove("flow"); !removed || log.flow != "" {
-		t.Errorf("flow not removed: removed=%t/'%s'", removed, log.flow)
+	log.Flow = "xxx"
+	if removed := log.Remove("flow"); !removed || log.Flow != "" {
+		t.Errorf("flow not removed: removed=%t/'%s'", removed, log.Flow)
 	}
 
 	log.date = "a"
@@ -93,9 +93,9 @@ func TestLogRemove(t *testing.T) {
 
 func TestLogString(t *testing.T) {
 	log := NewLog()
-	log.thread = "[1234]"
-	log.level = "INFO"
-	log.class = "com.my.package.Class"
+	log.Thread = "[1234]"
+	log.Level = "INFO"
+	log.Class = "com.my.package.Class"
 	log.time = "111111,111"
 	log.date = "2017-24-11"
 	log.props = append(log.props, Property{key: "a", value: "1234"})

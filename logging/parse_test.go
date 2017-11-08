@@ -14,26 +14,26 @@ const log3 = "2017-04-19 18:01:11,437     INFO [Test worker]    core.Instrumenta
 var expected1 = Log{
 	time:      "14:54:39,474",
 	date:      "2017-09-07",
-	level:     Debug,
-	thread:    "[pool-5-thread-6]",
-	class:     "control.RaptorHandler",
-	flow:      "Publish",
-	operation: "CreatePublisher",
-	traceID:   "Publish:Rumor:012ae1a5-3416-4458-b0c1-6eb3e0ab4c80",
-	step:      Attempt,
+	Level:     Debug,
+	Thread:    "[pool-5-thread-6]",
+	Class:     "control.RaptorHandler",
+	Flow:      "Publish",
+	Operation: "CreatePublisher",
+	TraceID:   "Publish:Rumor:012ae1a5-3416-4458-b0c1-6eb3e0ab4c80",
+	Step:      Attempt,
 	props:     nil,
 }
 
 var expected2 = Log{
 	date:      "2017-09-07",
 	time:      "14:54:39,474",
-	level:     Debug,
-	thread:    "[pool-5-thread-6]",
-	class:     "control.RaptorHandler",
-	flow:      "Publish",
-	operation: "CreatePublisher",
-	traceID:   "Publish:Rumor:112ae1a5-3416-4458-b0c1-6eb3e0ab4c80",
-	step:      Attempt,
+	Level:     Debug,
+	Thread:    "[pool-5-thread-6]",
+	Class:     "control.RaptorHandler",
+	Flow:      "Publish",
+	Operation: "CreatePublisher",
+	TraceID:   "Publish:Rumor:112ae1a5-3416-4458-b0c1-6eb3e0ab4c80",
+	Step:      Attempt,
 	props: []Property{
 		{"sessionId", "1_MX4xMDB-fjE1MDQ4MjEyNzAxMjR-WThtTVpEN0J2c1Z2TlJGcndTN1lpTExGfn4"},
 		{"connectionId", "f41973e5-b27c-49e4-bcaf-1d48b153683e"},
@@ -49,40 +49,40 @@ var expected2 = Log{
 var expected3 = Log{
 	date:      "2017-04-19",
 	time:      "18:01:11,437",
-	level:     Info,
-	thread:    "[Test worker]",
-	class:     "core.InstrumentationListener",
-	flow:      "",
-	operation: "",
-	traceID:   "",
-	step:      "",
+	Level:     Info,
+	Thread:    "[Test worker]",
+	Class:     "core.InstrumentationListener",
+	Flow:      "",
+	Operation: "",
+	TraceID:   "",
+	Step:      "",
 	props:     nil,
 }
 
 func testEquals(t *testing.T, output Log, expected Log) {
-	if expected.Time() != output.Time() {
-		t.Errorf("expected Time %s found %s", expected.Time(), output.Time())
+	if expected.Timestamp() != output.Timestamp() {
+		t.Errorf("expected Time %s found %s", expected.Timestamp(), output.Timestamp())
 	}
-	if expected.Level() != output.Level() {
-		t.Errorf("expected Level() %s found %s", expected.Level(), output.Level())
+	if expected.Level != output.Level {
+		t.Errorf("expected Level() %s found %s", expected.Level, output.Level)
 	}
-	if expected.Thread() != output.Thread() {
-		t.Errorf("expected Thread() %s found %s", expected.Thread(), output.Thread())
+	if expected.Thread != output.Thread {
+		t.Errorf("expected Thread() %s found %s", expected.Thread, output.Thread)
 	}
-	if expected.Class() != output.Class() {
-		t.Errorf("expected Class() %s found %s", expected.Class(), output.Class())
+	if expected.Class != output.Class {
+		t.Errorf("expected Class() %s found %s", expected.Class, output.Class)
 	}
-	if expected.Flow() != output.Flow() {
-		t.Errorf("expected Flow() %s found %s", expected.Flow(), output.Flow())
+	if expected.Flow != output.Flow {
+		t.Errorf("expected Flow() %s found %s", expected.Flow, output.Flow)
 	}
-	if expected.Operation() != output.Operation() {
-		t.Errorf("expected Operation() %s found %s", expected.Operation(), output.Operation())
+	if expected.Operation != output.Operation {
+		t.Errorf("expected Operation() %s found %s", expected.Operation, output.Operation)
 	}
-	if expected.TraceID() != output.TraceID() {
-		t.Errorf("expected TraceID() %s found %s", expected.TraceID(), output.TraceID())
+	if expected.TraceID != output.TraceID {
+		t.Errorf("expected TraceID() %s found %s", expected.TraceID, output.TraceID)
 	}
-	if expected.Step() != output.Step() {
-		t.Errorf("expected Step() %s found %s", expected.Step(), output.Step())
+	if expected.Step != output.Step {
+		t.Errorf("expected Step() %s found %s", expected.Step, output.Step)
 	}
 
 	seen := make(map[string]struct{})
