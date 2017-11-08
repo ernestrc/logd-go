@@ -131,6 +131,9 @@ func loadUtils(l *lua.State) {
 
 	l.PushGoFunction(RemoveProperty)
 	l.SetGlobal("remove")
+
+	l.PushGoFunction(ResetLog)
+	l.SetGlobal("reset")
 }
 
 func loadLuaRuntime() *lua.State {
