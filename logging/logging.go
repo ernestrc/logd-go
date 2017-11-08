@@ -27,6 +27,7 @@ const (
 	KeyTraceID          = "traceId"
 	KeyThread           = "thread"
 	KeyClass            = "class"
+	KeyLevel            = "level"
 	KeyTime             = "time"
 	KeyDate             = "date"
 	KeyTimestamp        = "timestamp"
@@ -78,7 +79,7 @@ func (l *Log) Timestamp() string {
 // It returns true if a property with the given key was found and removed.
 func (l *Log) Remove(key string) (found bool) {
 	switch key {
-	case KeyFlow, KeyOperation, KeyStep, KeyTraceID, KeyThread, KeyClass, KeyTime, KeyDate, KeyTimestamp:
+	case KeyFlow, KeyOperation, KeyStep, KeyTraceID, KeyThread, KeyLevel, KeyClass, KeyTime, KeyDate, KeyTimestamp:
 		found = l.Set(key, "")
 	default:
 		last := len(l.props) - 1
@@ -132,6 +133,9 @@ func (l *Log) Set(key string, value string) (upsert bool) {
 	case KeyTraceID:
 		upsert = l.TraceID != ""
 		l.TraceID = value
+	case KeyLevel:
+		upsert = l.Level != ""
+		l.Level = value
 	case KeyThread:
 		upsert = l.Thread != ""
 		l.Thread = value
@@ -179,6 +183,9 @@ func (l *Log) Get(key string) (value string, ok bool) {
 	case KeyThread:
 		ok = l.Thread != ""
 		value = l.Thread
+	case KeyLevel:
+		ok = l.Level != ""
+		value = l.Level
 	case KeyClass:
 		ok = l.Class != ""
 		value = l.Class
