@@ -101,12 +101,13 @@ func init() {
 	serLog.Class = "com.my.package.Class"
 	serLog.time = "111111,111"
 	serLog.date = "2017-24-11"
+	serLog.Flow = "myFlow"
 	serLog.props = append(serLog.props, Property{key: "a", value: "1234"})
 	serLog.props = append(serLog.props, Property{key: "b", value: "xxx"})
 }
 
 func TestLogString(t *testing.T) {
-	expected := "2017-24-11 111111,111	INFO	[1234]	com.my.package.Class	a: 1234, b: xxx"
+	expected := "2017-24-11 111111,111	INFO	[1234]	com.my.package.Class	flow: myFlow, operation: , step: , traceId: , a: 1234, b: xxx"
 
 	if str := serLog.String(); str != expected {
 		t.Errorf("expected '%s' found '%s'", expected, str)
@@ -114,7 +115,7 @@ func TestLogString(t *testing.T) {
 }
 
 func TestLogJSON(t *testing.T) {
-	expected := `{"timestamp": "2017-24-11 111111,111", "level": "INFO", "thread": "[1234]", "class": "com.my.package.Class", "a": "1234", "b": "xxx"}`
+	expected := `{"timestamp": "2017-24-11 111111,111", "level": "INFO", "thread": "[1234]", "class": "com.my.package.Class", "flow": "myFlow", "operation": "", "step": "", "traceId": "", "a": "1234", "b": "xxx"}`
 
 	if str := serLog.JSON(); str != expected {
 		t.Errorf("expected '%s' found '%s'", expected, str)

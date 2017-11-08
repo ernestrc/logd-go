@@ -109,7 +109,7 @@ func (l *Log) Set(key string, value string) (upsert bool) {
 	switch key {
 	case KeyTimestamp:
 		upsert = l.date != "" || l.time != ""
-		// special case, set both time and date to zero values
+		// set both time and date to zero values
 		if value == "" {
 			l.date = ""
 			l.time = ""
@@ -214,38 +214,40 @@ func (l *Log) Props() []Property {
 	return l.props
 }
 
+func appendProp(str, keySep, valueSep string, p Property) string {
+	str += keySep
+	str += p.key
+	str += valueSep
+	str += p.value
+	return str
+}
+
 // TODO should escape runes '\t', '\n', '"'
-func (l *Log) serialize(template, templateSep, keySep, valueSep string) (str string) {
+func (l *Log) serialize(template, headerSep, keySep, valueSep string) (str string) {
 	str = template
 	if len(l.props) == 0 {
 		return
 	}
 
-	first := l.props[0]
-	str += templateSep
-	str += first.key
-	str += valueSep
-	str += first.value
+	str = appendProp(str, headerSep, valueSep, l.props[0])
 
 	for _, p := range l.props[1:] {
-		str += keySep
-		str += p.key
-		str += valueSep
-		str += p.value
+		str = appendProp(str, keySep, valueSep, p)
 	}
 
 	return
 }
 
 func (l *Log) String() (str string) {
-	str += fmt.Sprintf("%s %s\t%s\t%s\t%s", l.date, l.time, l.Level, l.Thread, l.Class)
-	str = l.serialize(str, "\t", ", ", ": ")
+	str += fmt.Sprintf("%s %s\t%s\t%s\t%s\tflow: %s, operation: %s, step: %s, traceId: %s", l.date, l.time, l.Level, l.Thread, l.Class, l.Flow, l.Operation, l.Step, l.TraceID)
+	str = l.serialize(str, ", ", ", ", ": ")
 	return
 }
 
 // JSON serializes the log in JSON format
 func (l *Log) JSON() (str string) {
-	str += fmt.Sprintf("{\"timestamp\": \"%s %s\", \"level\": \"%s\", \"thread\": \"%s\", \"class\": \"%s", l.date, l.time, l.Level, l.Thread, l.Class)
+	str += fmt.Sprintf("{\"timestamp\": \"%s %s\", \"level\": \"%s\", \"thread\": \"%s\", \"class\": \"%s\", \"flow\": \"%s\", \"operation\": \"%s\", \"step\": \"%s\", \"traceId\": \"%s",
+		l.date, l.time, l.Level, l.Thread, l.Class, l.Flow, l.Operation, l.Step, l.TraceID)
 	str = l.serialize(str, `", "`, `", "`, `": "`)
 	str += `"}`
 	return str
