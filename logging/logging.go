@@ -28,8 +28,8 @@ type Property struct {
 // Log represents a structured log
 type Log struct {
 	/* header */
-	time   string
 	date   string
+	time   string
 	level  string
 	thread string
 	class  string
@@ -145,4 +145,27 @@ func (l *Log) Get(key string) (value string, ok bool) {
 // It does not contain any of the named properties.
 func (l *Log) Props() []Property {
 	return l.props
+}
+
+func (l *Log) String() (str string) {
+	str += fmt.Sprintf("%s\t%s\t%s\t%s\t%s", l.date, l.time, l.level, l.thread, l.class)
+
+	if len(l.props) == 0 {
+		return
+	}
+
+	first := l.props[0]
+	str += "\t"
+	str += first.key
+	str += ": "
+	str += first.value
+
+	for _, p := range l.props[1:] {
+		str += ", "
+		str += p.key
+		str += ": "
+		str += p.value
+	}
+
+	return
 }

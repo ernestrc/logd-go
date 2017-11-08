@@ -50,3 +50,20 @@ func TestLogRemove(t *testing.T) {
 		t.Errorf("expected false/len=0 found %t/%d", ok, len(log.props))
 	}
 }
+
+func TestLogString(t *testing.T) {
+	log := NewLog()
+	log.thread = "[1234]"
+	log.level = "INFO"
+	log.class = "com.my.package.Class"
+	log.time = "111111,111"
+	log.date = "2017-24-11"
+	log.props = append(log.props, Property{key: "a", value: "1234"})
+	log.props = append(log.props, Property{key: "b", value: "xxx"})
+
+	expected := "2017-24-11	111111,111	INFO	[1234]	com.my.package.Class	a: 1234, b: xxx"
+
+	if str := log.String(); str != expected {
+		t.Errorf("expected '%s' found '%s'", expected, str)
+	}
+}
