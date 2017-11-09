@@ -146,11 +146,13 @@ func callLuaMapFn(l *lua.State, log *logging.Log) *logging.Log {
 	return ptr
 }
 
-func callLuaScheduledFn(l *lua.State) {
+// returns true if on_tick function is defined
+func callLuaScheduledFn(l *lua.State) bool {
 	l.Global("on_tick")
 	if l.IsFunction(-1) {
 		l.Call(0, 0)
-	} else {
-		l.Pop(-1)
+		return true
 	}
+	l.Pop(-1)
+	return false
 }

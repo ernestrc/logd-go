@@ -68,13 +68,18 @@ func getLogWriter() logWriter {
 }
 
 func runTicker(luaLock *sync.Mutex, l *lua.State, exit chan<- error) {
-	tick := time.Tick(time.Duration(*period * 1000 * 1000))
+	ticker := time.NewTicker(time.Duration(*period * 1000 * 1000))
+	defer ticker.Stop()
 
 	for {
 		luaLock.Lock()
-		callLuaScheduledFn(l)
+		defined := callLuaScheduledFn(l)
 		luaLock.Unlock()
-		<-tick
+		// stop goroutine if on_tick is not defined
+		if !defined {
+			return
+		}
+		<-ticker.C
 	}
 }
 
