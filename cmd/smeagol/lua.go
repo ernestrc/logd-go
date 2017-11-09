@@ -3,50 +3,33 @@ package main
 import (
 	"fmt"
 	"os"
+	"reflect"
 
 	lua "github.com/Shopify/go-lua"
 	"github.com/opentok/blue/logging"
 )
 
 // default lua script
-var noop = "function map (logptr)\nreturn logptr\nend"
+var noop = "function on_log (logptr)\nreturn logptr\nend"
 
 const getLineQuery = "nSl"
 
-// bubble up a lua error which translates into a panic of the program
-func luaPanic(l *lua.State, tmpl string, args ...interface{}) {
-	f, ok := lua.Stack(l, 0)
-	if !ok {
-		panic("could not get lua script current frame")
-	}
-	var d lua.Debug
-	if d, ok = lua.Info(l, getLineQuery, f); !ok {
-		panic("could not get lua frame debug info")
-	}
-
-	err := fmt.Sprintf("%s: %+v", fmt.Sprintf(tmpl, args...), d)
-	l.PushString(err)
-
-	// panic
-	l.Error()
-}
-
 func popLogPtr(l *lua.State, i int, fn string) *logging.Log {
-	j := i * -1
-	if !l.IsUserData(j) {
+	if !l.IsUserData(i) {
 		// returning nil signals discarding the log
-		if l.IsNil(j) {
+		if l.IsNil(i) {
 			return nil
 		}
-		luaPanic(l, "%d return value must be a pointer to a logging.Log structure in call to builtin '%s' function: found %s", j, fn, l.TypeOf(i))
-		return nil
+		fmt.Fprintf(os.Stderr, "%d return value must be a pointer to a logging.Log structure in call to builtin '%s' function: found %s", i, fn, l.TypeOf(i))
+		os.Exit(1)
 	}
-	ifc := l.ToUserData(j)
+	ifc := l.ToUserData(i)
 	l.Pop(i)
 
 	log, ok := ifc.(*logging.Log)
 	if !ok {
-		luaPanic(l, "%d return value must be a pointer to a logging.Log structure in call to builtin '%s' function: %+v", j, fn, ifc)
+		fmt.Fprintf(os.Stderr, "%d return value must be a pointer to a logging.Log structure in call to builtin '%s' function: %+v", i, fn, reflect.TypeOf(ifc))
+		os.Exit(1)
 	}
 
 	return log
@@ -55,7 +38,8 @@ func popLogPtr(l *lua.State, i int, fn string) *logging.Log {
 func getArgLogPtr(l *lua.State, i int, fn string) *logging.Log {
 	log, ok := l.ToUserData(i).(*logging.Log)
 	if !ok {
-		luaPanic(l, "%d argument must be a pointer to a logging.Log structure in call to builtin '%s' function: found %s", i, fn, l.TypeOf(i))
+		fmt.Fprintf(os.Stderr, "%d argument must be a pointer to a logging.Log structure in call to builtin '%s' function: found %s", i, fn, l.TypeOf(i))
+		os.Exit(1)
 	}
 	return log
 }
@@ -63,7 +47,8 @@ func getArgLogPtr(l *lua.State, i int, fn string) *logging.Log {
 func getArgString(l *lua.State, i int, fn string) string {
 	key, ok := l.ToString(i)
 	if !ok {
-		luaPanic(l, "%d argument must be a string in call to builtin '%s' function: found %s", i, fn, l.TypeOf(i))
+		fmt.Fprintf(os.Stderr, "%d argument must be a string in call to builtin '%s' function: found %s", i, fn, l.TypeOf(i))
+		os.Exit(1)
 	}
 	return key
 }
@@ -128,22 +113,44 @@ func loadUtils(l *lua.State) {
 	l.SetGlobal("reset")
 }
 
-func loadLuaRuntime() *lua.State {
-	l := lua.NewState()
-	lua.OpenLibraries(l)
-	loadUtils(l)
-
+func loadScript(l *lua.State) {
 	var err error
 	if *script == "" {
-		err = lua.LoadString(l, noop)
+		err = lua.DoString(l, noop)
 	} else {
-		err = lua.LoadFile(l, *script, *scriptMode)
+		err = lua.DoFile(l, *script)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "there was an error when loading script: %s\n", err)
 		os.Exit(1)
 	}
+}
 
-	l.SetGlobal("map")
+func loadLuaRuntime() *lua.State {
+	l := lua.NewState()
+	// TODO should whitelist libraries that are loaded
+	lua.OpenLibraries(l)
+	loadUtils(l)
+	loadScript(l)
 	return l
+}
+
+func callLuaMapFn(l *lua.State, log *logging.Log) *logging.Log {
+	l.Global("on_log")
+	if !l.IsFunction(-1) {
+		panic("not defined in lua script: function on_log (logptr)")
+	}
+	l.PushUserData(log)
+	l.Call(1, 1)
+	ptr := popLogPtr(l, -1, "on_log")
+	return ptr
+}
+
+func callLuaScheduledFn(l *lua.State) {
+	l.Global("on_tick")
+	if l.IsFunction(-1) {
+		l.Call(0, 0)
+	} else {
+		l.Pop(-1)
+	}
 }

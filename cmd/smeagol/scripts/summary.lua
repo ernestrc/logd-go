@@ -1,4 +1,8 @@
-function map (logptr)
+function on_tick ()
+	print("tick!")
+end
+
+function on_log (logptr)
 	-- example usage of "get" builtin
 	flow = get(logptr, "flow")
 

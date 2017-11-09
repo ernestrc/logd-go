@@ -7,7 +7,10 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"sync"
+	"time"
 
+	lua "github.com/Shopify/go-lua"
 	"github.com/opentok/blue/logging"
 )
 
@@ -21,10 +24,10 @@ type logWriter func(io.Writer, *logging.Log)
 var validOutputModes = [3]string{"stdout", "stderr", "null"}
 var validOutputFormats = [2]string{"JSON", "otlog"}
 
-var script = flag.String("S", "", "Lua script that implements transformation function map (logptr)")
-var scriptMode = flag.String("M", "bt", "Lua script load mode which controls whether the chunk can be text or binary (that is, a precompiled chunk). It may be the string 'b' (only binary chunks), 't' (only text chunks), or 'bt' (both binary and text). The default is 'bt'")
+var script = flag.String("S", "", "Lua script to run")
 var outputFormat = flag.String("F", "otlog", fmt.Sprintf("Output format of the logs. Default is 'otlog' which the same format than the input of the log. Other valid formats: %v", validOutputFormats))
 var output = flag.String("O", "stdout", fmt.Sprintf("Output mode. Available modes: %v. Default is 'stdout'", validOutputModes))
+var period = flag.Int("P", 1000, "coroutine period in milliseconds. Default is 1000ms")
 
 func getIoWriter() (o fwriter) {
 	switch *output {
@@ -64,34 +67,67 @@ func getLogWriter() logWriter {
 	return nil
 }
 
-func main() {
-	flag.Parse()
+func runTicker(luaLock *sync.Mutex, l *lua.State, exit chan<- error) {
+	tick := time.Tick(time.Duration(*period * 1000 * 1000))
 
+	for {
+		luaLock.Lock()
+		callLuaScheduledFn(l)
+		luaLock.Unlock()
+		<-tick
+	}
+}
+
+func runPipeline(luaLock *sync.Mutex, l *lua.State, exit chan<- error, reader io.Reader, writer logWriter, ioWriter fwriter) {
 	p := logging.NewParser()
-	reader := bufio.NewReader(os.Stdin)
-	writer := getLogWriter()
-	ioWriter := getIoWriter()
-	defer ioWriter.Flush()
+
 	logs := make([]logging.Log, 0)
-	l := loadLuaRuntime()
 
 	var buf [64 * 1000 * 1000]byte
+	var err error
 	for {
-		n, err := reader.Read(buf[:])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s", err)
+		var n int
+		if n, err = reader.Read(buf[:]); err != nil {
 			break
 		}
+
+		luaLock.Lock()
 		logs = p.Parse(string(buf[:n]), logs)
+
 		for _, log := range logs {
-			l.Global("map")
-			l.PushUserData(&log)
-			l.Call(1, 1)
-			ptr := popLogPtr(l, 1, "map")
-			if ptr != nil {
+			if ptr := callLuaMapFn(l, &log); ptr != nil {
 				writer(ioWriter, ptr)
 			}
 		}
+
 		logs = logs[:0]
+		luaLock.Unlock()
+	}
+	if err != nil && err != io.EOF {
+		fmt.Fprint(os.Stderr, "error: ")
+		exit <- err
+	} else {
+		fmt.Fprint(os.Stderr, "EOF")
+		exit <- nil
+	}
+}
+
+func main() {
+	flag.Parse()
+	writer := getLogWriter()
+	reader := bufio.NewReader(os.Stdin)
+	ioWriter := getIoWriter()
+	l := loadLuaRuntime()
+	exit := make(chan error)
+	var luaMutex sync.Mutex
+
+	defer ioWriter.Flush()
+	go runTicker(&luaMutex, l, exit)
+	go runPipeline(&luaMutex, l, exit, reader, writer, ioWriter)
+
+	err := <-exit
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s", err)
+		os.Exit(1)
 	}
 }
