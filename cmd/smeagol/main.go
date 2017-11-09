@@ -27,7 +27,7 @@ var validOutputFormats = [2]string{"JSON", "otlog"}
 var script = flag.String("S", "", "Lua script to run")
 var outputFormat = flag.String("F", "otlog", fmt.Sprintf("Output format of the logs. Default is 'otlog' which the same format than the input of the log. Other valid formats: %v", validOutputFormats))
 var output = flag.String("O", "stdout", fmt.Sprintf("Output mode. Available modes: %v. Default is 'stdout'", validOutputModes))
-var period = flag.Int("P", 1000, "coroutine period in milliseconds. Default is 1000ms")
+var period = flag.Int("P", 0, "coroutine period in milliseconds. Default is 0 (deactivated)")
 
 func getIoWriter() (o fwriter) {
 	switch *output {
@@ -68,6 +68,10 @@ func getLogWriter() logWriter {
 }
 
 func runTicker(luaLock *sync.Mutex, l *lua.State, exit chan<- error) {
+	// deactivated if period is set to <= 0
+	if *period <= 0 {
+		return
+	}
 	ticker := time.NewTicker(time.Duration(*period * 1000 * 1000))
 	defer ticker.Stop()
 
@@ -77,6 +81,7 @@ func runTicker(luaLock *sync.Mutex, l *lua.State, exit chan<- error) {
 		luaLock.Unlock()
 		// stop goroutine if on_tick is not defined
 		if !defined {
+			fmt.Fprintf(os.Stderr, "on_tick is not defined. coroutine deactivated")
 			return
 		}
 		<-ticker.C
