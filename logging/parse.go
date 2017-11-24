@@ -12,6 +12,9 @@ const (
 	threadState
 	transitionClassState
 	classState
+	transitionCallTypeState
+	callTypeState
+	verifyCallTypeState
 	keyState
 	multiKeyState
 	valueState
@@ -48,7 +51,7 @@ func (p *Parser) handleNextKey(log *Log, r rune) {
 func (p *Parser) handleNextMultiKey(log *Log, r rune) {
 	switch r {
 	// TODO case ',':
-	//	p.consumeCurrent(log)
+	//	p.consumeCurrent()
 	//	p.state = keyState
 	//	p.end++
 	//	p.start = p.end
@@ -65,35 +68,32 @@ func (p *Parser) handleNextMultiKey(log *Log, r rune) {
 	}
 }
 
-func (p *Parser) consumeCurrent(log *Log) {
+func (p *Parser) consumeCurrent() {
+	log := &p.current
 	i := len(log.props) - 1
 	if i < 0 {
 		return
 	}
-	currProp := log.props[i]
-	var field *string
-	switch currProp.key {
-	case KeyStep:
-		field = &log.Step
-	case KeyFlow:
-		field = &log.Flow
-	case KeyOperation:
-		field = &log.Operation
-	case KeyTraceID:
-		field = &log.TraceID
-	default:
-		log.props[i] = Property{currProp.key, p.raw[p.start:p.end]}
+	log.props[i].value = p.raw[p.start:p.end]
+}
+
+func (p *Parser) consumeLog() {
+	log := &p.current
+	i := len(log.props) - 1
+	if i < 0 || log.props[i].value != "" {
+		// key has not been consumed yet so remainging is message
+		log.Message = p.raw[p.start:p.end]
 		return
 	}
 
-	*field = p.raw[p.start:p.end]
-	log.props = log.props[:i]
+	// key has been consumed, so remainging is value
+	log.props[i].value = p.raw[p.start:p.end]
 }
 
 func (p *Parser) handleNextValue(log *Log, r rune) {
 	switch r {
 	case ',':
-		p.consumeCurrent(log)
+		p.consumeCurrent()
 		p.state = keyState
 		p.end++
 		p.start = p.end
@@ -113,9 +113,7 @@ func (p *Parser) handleNextValue(log *Log, r rune) {
 
 func (p *Parser) handleTransition(r rune) bool {
 	switch r {
-	case '\t':
-		fallthrough
-	case ' ':
+	case '\t', ' ':
 		p.start++
 		p.end++
 	default:
@@ -128,9 +126,7 @@ func (p *Parser) handleTransition(r rune) bool {
 
 func (p *Parser) handleNextHeader(prop *string, r rune) {
 	switch r {
-	case '\t':
-		fallthrough
-	case ' ':
+	case '\t', ' ':
 		*prop = p.raw[p.start:p.end]
 		p.end++
 		p.start = p.end
@@ -143,12 +139,37 @@ func (p *Parser) handleNextHeader(prop *string, r rune) {
 func (p *Parser) handleNextThread(log *Log, r rune) {
 	switch r {
 	case ']':
-		p.end++
+		p.start++
 		log.Thread = p.raw[p.start:p.end]
+		p.end++
 		p.start = p.end
 		p.state++
 	default:
 		p.end++
+	}
+}
+
+func (p *Parser) handleNextCallType(log *Log, r rune) {
+	switch r {
+	case ':':
+		log.props = append(log.props, Property{key: "callType"})
+		p.consumeCurrent()
+		p.end++
+		p.start = p.end
+		p.state++
+	default:
+		p.end++
+	}
+}
+
+func (p *Parser) verifyCallType(log *Log, r rune) {
+	switch r {
+	// was not callType
+	case ',':
+		log.props[0].key = log.props[0].value
+		p.handleNextValue(log, r)
+	default:
+		p.handleNextKey(log, r)
 	}
 }
 
@@ -164,6 +185,11 @@ func (p *Parser) next(log *Log, r rune) {
 		p.handleNextThread(log, r)
 	case classState:
 		p.handleNextHeader(&log.Class, r)
+	case callTypeState:
+		p.handleNextCallType(log, r)
+	// callType is only committed if there are two keys in sequence: "callType: key: value"
+	case verifyCallTypeState:
+		p.verifyCallType(log, r)
 	case keyState:
 		p.handleNextKey(log, r)
 	case valueState:
@@ -186,7 +212,7 @@ func (p *Parser) Parse(chunk string, logs []Log) []Log {
 	for i, r := range p.raw {
 		switch r {
 		case '\n':
-			p.consumeCurrent(&p.current)
+			p.consumeLog()
 			p.start = i + 1
 			p.end = p.start
 			p.state = dateState

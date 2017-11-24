@@ -624,6 +624,10 @@ func (l *State) CheckStack(size int) bool {
 	return ok
 }
 
+func (l *State) GetStackLastTop() (int, int) {
+	return l.stackLast, l.top
+}
+
 // AtPanic sets a new panic function and returns the old one.
 func AtPanic(l *State, panicFunction Function) Function {
 	panicFunction, l.global.panicFunction = l.global.panicFunction, panicFunction

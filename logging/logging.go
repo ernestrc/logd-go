@@ -1,7 +1,9 @@
 package logging
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -14,23 +16,13 @@ const (
 )
 
 const (
-	Attempt string = "Attempt"
-	Success        = "Success"
-	Failure        = "Failure"
-	Event          = "Event"
-)
-
-const (
-	KeyFlow      string = "flow"
-	KeyOperation        = "operation"
-	KeyStep             = "step"
-	KeyTraceID          = "traceId"
-	KeyThread           = "thread"
-	KeyClass            = "class"
-	KeyLevel            = "level"
-	KeyTime             = "time"
-	KeyDate             = "date"
-	KeyTimestamp        = "timestamp"
+	KeyThread    = "thread"
+	KeyClass     = "class"
+	KeyLevel     = "level"
+	KeyTime      = "time"
+	KeyDate      = "date"
+	KeyTimestamp = "timestamp"
+	KeyMessage   = "msg"
 )
 
 // Property represents an arbitrary key-value pair in a Log
@@ -48,14 +40,9 @@ type Log struct {
 	Thread string
 	Class  string
 
-	/* named properties */
-	TraceID   string
-	Flow      string
-	Operation string
-	Step      string
-
 	/* other properties */
-	props []Property
+	Message string
+	props   []Property
 }
 
 // NewLog allocates storage and initializes a Log structure
@@ -79,7 +66,7 @@ func (l *Log) Timestamp() string {
 // It returns true if a property with the given key was found and removed.
 func (l *Log) Remove(key string) (found bool) {
 	switch key {
-	case KeyFlow, KeyOperation, KeyStep, KeyTraceID, KeyThread, KeyLevel, KeyClass, KeyTime, KeyDate, KeyTimestamp:
+	case KeyThread, KeyLevel, KeyClass, KeyTime, KeyDate, KeyTimestamp, KeyMessage:
 		found = l.Set(key, "")
 	default:
 		last := len(l.props) - 1
@@ -121,21 +108,12 @@ func (l *Log) Set(key string, value string) (upsert bool) {
 		}
 		l.date = o[0]
 		l.time = o[1]
-	case KeyFlow:
-		upsert = l.Flow != ""
-		l.Flow = value
-	case KeyOperation:
-		upsert = l.Operation != ""
-		l.Operation = value
-	case KeyStep:
-		upsert = l.Step != ""
-		l.Step = value
-	case KeyTraceID:
-		upsert = l.TraceID != ""
-		l.TraceID = value
 	case KeyLevel:
 		upsert = l.Level != ""
 		l.Level = value
+	case KeyMessage:
+		upsert = l.Message != ""
+		l.Message = value
 	case KeyThread:
 		upsert = l.Thread != ""
 		l.Thread = value
@@ -168,21 +146,12 @@ func (l *Log) Get(key string) (value string, ok bool) {
 	case KeyTimestamp:
 		value = l.Timestamp()
 		ok = value != ""
-	case KeyFlow:
-		ok = l.Flow != ""
-		value = l.Flow
-	case KeyOperation:
-		ok = l.Operation != ""
-		value = l.Operation
-	case KeyStep:
-		ok = l.Step != ""
-		value = l.Step
-	case KeyTraceID:
-		ok = l.TraceID != ""
-		value = l.TraceID
 	case KeyThread:
 		ok = l.Thread != ""
 		value = l.Thread
+	case KeyMessage:
+		ok = l.Message != ""
+		value = l.Message
 	case KeyLevel:
 		ok = l.Level != ""
 		value = l.Level
@@ -214,41 +183,123 @@ func (l *Log) Props() []Property {
 	return l.props
 }
 
-func appendProp(str, keySep, valueSep string, p Property) string {
-	str += keySep
-	str += p.key
-	str += valueSep
-	str += p.value
-	return str
+func escape(buf *bytes.Buffer, r rune) {
+	switch r {
+	case '\b':
+		buf.WriteByte('\\')
+		buf.WriteByte('b')
+	case '\f':
+		buf.WriteByte('\\')
+		buf.WriteByte('f')
+	case '\n':
+		buf.WriteByte('\\')
+		buf.WriteByte('n')
+	case '\r':
+		buf.WriteByte('\\')
+		buf.WriteByte('r')
+	case '\t':
+		buf.WriteByte('\\')
+		buf.WriteByte('t')
+	case '"':
+		buf.WriteByte('\\')
+		buf.WriteByte('"')
+	case '\\':
+		buf.WriteByte('\\')
+		buf.WriteByte('\\')
+	default:
+		buf.WriteRune(r)
+	}
 }
 
-// TODO should escape runes '\t', '\n', '"'
-func (l *Log) serialize(template, headerSep, keySep, valueSep string) (str string) {
-	str = template
-	if len(l.props) == 0 {
-		return
+func appendProp(keySep, valueSep string, p Property, buf *bytes.Buffer) {
+	buf.WriteString(keySep)
+	for _, r := range p.key {
+		escape(buf, r)
+	}
+	buf.WriteString(valueSep)
+	for _, r := range p.value {
+		escape(buf, r)
+	}
+}
+
+func (l *Log) serialize(buf *bytes.Buffer, headerSep, keySep, valueSep string) {
+	lenProps := len(l.props)
+	if lenProps == 0 {
+		keySep = headerSep
+		goto msg
 	}
 
-	str = appendProp(str, headerSep, valueSep, l.props[0])
+	appendProp(headerSep, valueSep, l.props[0], buf)
 
 	for _, p := range l.props[1:] {
-		str = appendProp(str, keySep, valueSep, p)
+		appendProp(keySep, valueSep, p, buf)
 	}
 
-	return
+msg:
+	if l.Message != "" {
+		appendProp(keySep, valueSep, Property{key: KeyMessage, value: l.Message}, buf)
+	}
 }
 
-func (l *Log) String() (str string) {
-	str += fmt.Sprintf("%s %s\t%s\t%s\t%s\tflow: %s, operation: %s, step: %s, traceId: %s", l.date, l.time, l.Level, l.Thread, l.Class, l.Flow, l.Operation, l.Step, l.TraceID)
-	str = l.serialize(str, ", ", ", ", ": ")
-	return
+func (l *Log) WriteJSONTo(buf *bytes.Buffer) {
+	buf.WriteString("{\"timestamp\": \"")
+	buf.WriteString(l.date)
+	buf.WriteByte(' ')
+	buf.WriteString(l.time)
+	buf.WriteString(`", "level": "`)
+	buf.WriteString(l.Level)
+	buf.WriteString(`", "thread": "`)
+	buf.WriteString(l.Thread)
+	buf.WriteString(`", "class": "`)
+	buf.WriteString(l.Class)
+	l.serialize(buf, `", "`, `", "`, `": "`)
+	buf.WriteString(`"}`)
+}
+
+func (l *Log) WriteTo(buf *bytes.Buffer) {
+	buf.WriteString(l.date)
+	buf.WriteByte(' ')
+	buf.WriteString(l.time)
+	buf.WriteByte('\t')
+	buf.WriteString(l.Level)
+	buf.WriteByte('\t')
+	buf.WriteByte('[')
+	if l.Thread != "" {
+		buf.WriteString(l.Thread)
+	} else {
+		buf.WriteByte('-')
+	}
+	buf.WriteByte(']')
+	buf.WriteByte('\t')
+	if l.Class != "" {
+		buf.WriteString(l.Class)
+	} else {
+		buf.WriteByte('-')
+	}
+	l.serialize(buf, "\t", ", ", ": ")
+}
+
+func (l *Log) String() string {
+	var buf bytes.Buffer
+	l.WriteTo(&buf)
+	return buf.String()
 }
 
 // JSON serializes the log in JSON format
-func (l *Log) JSON() (str string) {
-	str += fmt.Sprintf("{\"timestamp\": \"%s %s\", \"level\": \"%s\", \"thread\": \"%s\", \"class\": \"%s\", \"flow\": \"%s\", \"operation\": \"%s\", \"step\": \"%s\", \"traceId\": \"%s",
-		l.date, l.time, l.Level, l.Thread, l.Class, l.Flow, l.Operation, l.Step, l.TraceID)
-	str = l.serialize(str, `", "`, `", "`, `": "`)
-	str += `"}`
-	return str
+func (l *Log) JSON() string {
+	var buf bytes.Buffer
+	l.WriteJSONTo(&buf)
+	return buf.String()
+}
+
+func (l *Log) Reader() io.Reader {
+	var buf bytes.Buffer
+	l.WriteTo(&buf)
+	return &buf
+}
+
+func (l *Log) JSONReader() io.Reader {
+	var buf bytes.Buffer
+	l.WriteJSONTo(&buf)
+	return &buf
 }

@@ -8,38 +8,44 @@ import (
 )
 
 const log1 = "2017-09-07 14:54:39,474	DEBUG	[pool-5-thread-6]	control.RaptorHandler	PublisherCreateRequest: flow: Publish, step: Attempt, operation: CreatePublisher, traceId: Publish:Rumor:012ae1a5-3416-4458-b0c1-6eb3e0ab4c80\n"
-const log2 = "2017-09-07 14:54:39,474	DEBUG	[pool-5-thread-6]	control.RaptorHandler	PublisherCreateRequest: sessionId: 1_MX4xMDB-fjE1MDQ4MjEyNzAxMjR-WThtTVpEN0J2c1Z2TlJGcndTN1lpTExGfn4, flow: Publish, connectionId: f41973e5-b27c-49e4-bcaf-1d48b153683e, step: Attempt, publisherId: b4da82c4-cac5-4e13-b1dc-bb1f42b475dd, fromAddress: f41973e5-b27c-49e4-bcaf-1d48b153683e, projectId: 100, operation: CreatePublisher, traceId: Publish:Rumor:112ae1a5-3416-4458-b0c1-6eb3e0ab4c80, streamId: b4da82c4-cac5-4e13-b1dc-bb1f42b475dd, remoteIpAddress: 127.0.0.1, correlationId: b90232b5-3ee5-4c65-bb4e-29286d6a2771\n"
-const log3 = "2017-04-19 18:01:11,437     INFO [Test worker]    core.InstrumentationListener   DebugCallType \n"
+const log2 = "2017-09-07 14:54:39,474	DEBUG	[pool-5-thread-6]	control.RaptorHandler	sessionId: 1_MX4xMDB-fjE1MDQ4MjEyNzAxMjR-WThtTVpEN0J2c1Z2TlJGcndTN1lpTExGfn4, flow: Publish, conId: connectionId: f41973e5-b27c-49e4-bcaf-1d48b153683e, step: Attempt, publisherId: b4da82c4-cac5-4e13-b1dc-bb1f42b475dd, fromAddress: f41973e5-b27c-49e4-bcaf-1d48b153683e, projectId: 100, operation: CreatePublisher, traceId: Publish:Rumor:112ae1a5-3416-4458-b0c1-6eb3e0ab4c80, streamId: b4da82c4-cac5-4e13-b1dc-bb1f42b475dd, remoteIpAddress: 127.0.0.1, correlationId: b90232b5-3ee5-4c65-bb4e-29286d6a2771\n"
+const log3 = "2017-04-19 18:01:11,437     INFO [Test worker]    core.InstrumentationListener	i do not want to log anything special here\n"
+const log4 = "2017-04-19 18:01:11,437     INFO [Test worker]    core.InstrumentationListener	only: one\n"
+const log5 = "2017-11-16 19:07:56,883	WARN	[-]	-	flow: UpdateClientActivity, operation: HandleActiveEvent, step: Failure, luaRocks: true\n"
 
 var expected1 = Log{
-	time:      "14:54:39,474",
-	date:      "2017-09-07",
-	Level:     Debug,
-	Thread:    "[pool-5-thread-6]",
-	Class:     "control.RaptorHandler",
-	Flow:      "Publish",
-	Operation: "CreatePublisher",
-	TraceID:   "Publish:Rumor:012ae1a5-3416-4458-b0c1-6eb3e0ab4c80",
-	Step:      Attempt,
-	props:     nil,
+	time:    "14:54:39,474",
+	date:    "2017-09-07",
+	Level:   Debug,
+	Thread:  "pool-5-thread-6",
+	Class:   "control.RaptorHandler",
+	Message: "",
+	props: []Property{
+		{"callType", "PublisherCreateRequest"},
+		{"flow", "Publish"},
+		{"step", "Attempt"},
+		{"operation", "CreatePublisher"},
+		{"traceId", "Publish:Rumor:012ae1a5-3416-4458-b0c1-6eb3e0ab4c80"},
+	},
 }
 
 var expected2 = Log{
-	date:      "2017-09-07",
-	time:      "14:54:39,474",
-	Level:     Debug,
-	Thread:    "[pool-5-thread-6]",
-	Class:     "control.RaptorHandler",
-	Flow:      "Publish",
-	Operation: "CreatePublisher",
-	TraceID:   "Publish:Rumor:112ae1a5-3416-4458-b0c1-6eb3e0ab4c80",
-	Step:      Attempt,
+	date:    "2017-09-07",
+	time:    "14:54:39,474",
+	Level:   Debug,
+	Thread:  "pool-5-thread-6",
+	Class:   "control.RaptorHandler",
+	Message: "",
 	props: []Property{
 		{"sessionId", "1_MX4xMDB-fjE1MDQ4MjEyNzAxMjR-WThtTVpEN0J2c1Z2TlJGcndTN1lpTExGfn4"},
+		{"flow", "Publish"},
 		{"connectionId", "f41973e5-b27c-49e4-bcaf-1d48b153683e"},
+		{"step", "Attempt"},
 		{"publisherId", "b4da82c4-cac5-4e13-b1dc-bb1f42b475dd"},
 		{"fromAddress", "f41973e5-b27c-49e4-bcaf-1d48b153683e"},
 		{"projectId", "100"},
+		{"operation", "CreatePublisher"},
+		{"traceId", "Publish:Rumor:112ae1a5-3416-4458-b0c1-6eb3e0ab4c80"},
 		{"streamId", "b4da82c4-cac5-4e13-b1dc-bb1f42b475dd"},
 		{"remoteIpAddress", "127.0.0.1"},
 		{"correlationId", "b90232b5-3ee5-4c65-bb4e-29286d6a2771"},
@@ -47,16 +53,38 @@ var expected2 = Log{
 }
 
 var expected3 = Log{
-	date:      "2017-04-19",
-	time:      "18:01:11,437",
-	Level:     Info,
-	Thread:    "[Test worker]",
-	Class:     "core.InstrumentationListener",
-	Flow:      "",
-	Operation: "",
-	TraceID:   "",
-	Step:      "",
-	props:     nil,
+	date:    "2017-04-19",
+	time:    "18:01:11,437",
+	Level:   Info,
+	Thread:  "Test worker",
+	Class:   "core.InstrumentationListener",
+	Message: "i do not want to log anything special here",
+	props:   nil,
+}
+
+var expected4 = Log{
+	date:    "2017-04-19",
+	time:    "18:01:11,437",
+	Level:   Info,
+	Thread:  "Test worker",
+	Class:   "core.InstrumentationListener",
+	Message: "one",
+	props:   []Property{{"callType", "only"}},
+}
+
+var expected5 = Log{
+	date:    "2017-11-16",
+	time:    "19:07:56,883",
+	Level:   Warn,
+	Thread:  "-",
+	Class:   "-",
+	Message: "",
+	props: []Property{
+		{"flow", "UpdateClientActivity"},
+		{"operation", "HandleActiveEvent"},
+		{"step", "Failure"},
+		{"luaRocks", "true"},
+	},
 }
 
 func testEquals(t *testing.T, output Log, expected Log) {
@@ -64,25 +92,20 @@ func testEquals(t *testing.T, output Log, expected Log) {
 		t.Errorf("expected Time %s found %s", expected.Timestamp(), output.Timestamp())
 	}
 	if expected.Level != output.Level {
-		t.Errorf("expected Level() %s found %s", expected.Level, output.Level)
+		t.Errorf("expected Level %s found %s", expected.Level, output.Level)
 	}
 	if expected.Thread != output.Thread {
-		t.Errorf("expected Thread() %s found %s", expected.Thread, output.Thread)
+		t.Errorf("expected Thread %s found %s", expected.Thread, output.Thread)
 	}
 	if expected.Class != output.Class {
-		t.Errorf("expected Class() %s found %s", expected.Class, output.Class)
+		t.Errorf("expected Class %s found %s", expected.Class, output.Class)
 	}
-	if expected.Flow != output.Flow {
-		t.Errorf("expected Flow() %s found %s", expected.Flow, output.Flow)
+	if expected.Message != output.Message {
+		t.Errorf("expected Message %s found %s", expected.Message, output.Message)
 	}
-	if expected.Operation != output.Operation {
-		t.Errorf("expected Operation() %s found %s", expected.Operation, output.Operation)
-	}
-	if expected.TraceID != output.TraceID {
-		t.Errorf("expected TraceID() %s found %s", expected.TraceID, output.TraceID)
-	}
-	if expected.Step != output.Step {
-		t.Errorf("expected Step() %s found %s", expected.Step, output.Step)
+
+	if len(expected.props) != len(output.props) {
+		t.Errorf("expected output props len to be %d but found %d", len(expected.props), len(output.props))
 	}
 
 	seen := make(map[string]struct{})
@@ -90,8 +113,12 @@ func testEquals(t *testing.T, output Log, expected Log) {
 	for i, p := range expected.props {
 		k := p.key
 		v := p.value
-		if v != output.props[i].value {
-			t.Errorf("expected %s %s found %s", k, expected.props[i].value, output.props[i].value)
+		if i >= len(output.props) || v != output.props[i].value {
+			var out string
+			if len(output.props) > i {
+				out = output.props[i].value
+			}
+			t.Errorf("expected %s %s found %s", k, v, out)
 		}
 		seen[k] = struct{}{}
 	}
@@ -104,19 +131,29 @@ func testEquals(t *testing.T, output Log, expected Log) {
 	}
 }
 
-func TestParserNoProps(t *testing.T) {
+func TestParserProps1(t *testing.T) {
 	logs := Parse(log1)
 	testEquals(t, logs[0], expected1)
 }
 
-func TestParserProps(t *testing.T) {
+func TestParserProps2(t *testing.T) {
 	logs := Parse(log2)
 	testEquals(t, logs[0], expected2)
+}
+
+func TestParserProps5(t *testing.T) {
+	logs := Parse(log5)
+	testEquals(t, logs[0], expected5)
 }
 
 func TestParserNothing(t *testing.T) {
 	logs := Parse(log3)
 	testEquals(t, logs[0], expected3)
+}
+
+func TestParserOnlyCallTypeMsg(t *testing.T) {
+	logs := Parse(log4)
+	testEquals(t, logs[0], expected4)
 }
 
 func TestParserMulti(t *testing.T) {
@@ -161,16 +198,19 @@ func testGetProp(t *testing.T, log *Log, key, value string) {
 }
 
 func TestGetProp(t *testing.T) {
-	log := Parse(log2)[0]
-	testGetProp(t, &log, "sessionId", "1_MX4xMDB-fjE1MDQ4MjEyNzAxMjR-WThtTVpEN0J2c1Z2TlJGcndTN1lpTExGfn4")
-	testGetProp(t, &log, "connectionId", "f41973e5-b27c-49e4-bcaf-1d48b153683e")
-	testGetProp(t, &log, "publisherId", "b4da82c4-cac5-4e13-b1dc-bb1f42b475dd")
-	testGetProp(t, &log, "fromAddress", "f41973e5-b27c-49e4-bcaf-1d48b153683e")
-	testGetProp(t, &log, "projectId", "100")
-	testGetProp(t, &log, "streamId", "b4da82c4-cac5-4e13-b1dc-bb1f42b475dd")
-	testGetProp(t, &log, "remoteIpAddress", "127.0.0.1")
-	testGetProp(t, &log, "correlationId", "b90232b5-3ee5-4c65-bb4e-29286d6a2771")
+	parsed2 := Parse(log2)[0]
+	testGetProp(t, &parsed2, "sessionId", "1_MX4xMDB-fjE1MDQ4MjEyNzAxMjR-WThtTVpEN0J2c1Z2TlJGcndTN1lpTExGfn4")
+	testGetProp(t, &parsed2, "connectionId", "f41973e5-b27c-49e4-bcaf-1d48b153683e")
+	testGetProp(t, &parsed2, "publisherId", "b4da82c4-cac5-4e13-b1dc-bb1f42b475dd")
+	testGetProp(t, &parsed2, "fromAddress", "f41973e5-b27c-49e4-bcaf-1d48b153683e")
+	testGetProp(t, &parsed2, "projectId", "100")
+	testGetProp(t, &parsed2, "streamId", "b4da82c4-cac5-4e13-b1dc-bb1f42b475dd")
+	testGetProp(t, &parsed2, "remoteIpAddress", "127.0.0.1")
+	testGetProp(t, &parsed2, "correlationId", "b90232b5-3ee5-4c65-bb4e-29286d6a2771")
 
+	parsed1 := Parse(log1)[0]
+	testGetProp(t, &parsed1, "callType", "PublisherCreateRequest")
+	testGetProp(t, &parsed1, "flow", "Publish")
 }
 
 // 3 log lines
