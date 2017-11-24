@@ -178,7 +178,7 @@ func luaHTTPPost(l *lua.State) int {
 	// and the http requests channel is full, Post will block and thus create a deadlock
 	sandbox.luaLock.Unlock()
 	defer sandbox.luaLock.Lock()
-	_, err := sandbox.write.http.Post(url, payload, contentType)
+	_, err := sandbox.http.Post(url, payload, contentType)
 	if err != nil {
 		panic(err)
 	}

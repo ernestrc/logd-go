@@ -21,18 +21,13 @@ const (
 	luaNameOnHTTPErrorFn = "on_http_error"
 )
 
-type writers struct {
-	stdout logging.LogWriter
-	http   http.AsyncClient
-}
-
 // Sandbox represents a lua VM wich exposes a series of builtin functions
 // to perform I/O operations and transformations over logging.Log structures.
 type Sandbox struct {
 	luaLock    sync.Mutex
 	tickerLock sync.Mutex
 	state      *lua.State
-	write      writers
+	http       *http.AsyncClient
 	cfg        *LuaConfig
 	scriptPath string
 	// channel to internally terminate ticker
@@ -57,15 +52,15 @@ func (l *Sandbox) setTick(tick int) {
 }
 
 func (l *Sandbox) setHTTPChannelBuffer(c int) {
-	cfg := l.write.http.Config()
+	cfg := l.http.Config()
 	cfg.ChanBuffer = c
-	l.write.http.Init(cfg, l.httpErrors)
+	l.http.Init(cfg, l.httpErrors)
 }
 
 func (l *Sandbox) setHTTPConcurrency(c int) {
-	cfg := l.write.http.Config()
+	cfg := l.http.Config()
 	cfg.Concurrency = c
-	l.write.http.Init(cfg, l.httpErrors)
+	l.http.Init(cfg, l.httpErrors)
 }
 
 func (l *Sandbox) loadUtils() {
@@ -102,7 +97,8 @@ func (l *Sandbox) loadUtils() {
 
 func (l *Sandbox) loadScript() error {
 	if err := lua.DoFile(l.state, l.scriptPath); err != nil {
-		return fmt.Errorf("there was an error when loading script: %s", err)
+		panic(err)
+		// return fmt.Errorf("there was an error when loading script: %s", err)
 	}
 
 	return nil
@@ -190,6 +186,12 @@ func (l *Sandbox) CallOnLog(lg *logging.Log) error {
 	return nil
 }
 
+func (l *Sandbox) initHTTP() {
+	l.httpErrors = make(chan http.Error)
+	l.http = http.NewClient(l.httpErrors)
+	go l.pollHTTPErrors()
+}
+
 // Init initializes l by instantiating a fresh lua state and loading the given script
 // along with the standard lua libraries in it. If cfg is nil, a default configuration is used.
 func (l *Sandbox) Init(scriptPath string, cfg *LuaConfig) (err error) {
@@ -203,18 +205,15 @@ func (l *Sandbox) Init(scriptPath string, cfg *LuaConfig) (err error) {
 			tick: 0,
 		}
 	}
-	l.httpErrors = make(chan http.Error)
 	l.state = lua.NewState()
 	l.scriptPath = scriptPath
-	l.write.stdout = *logging.NewLogWriter(os.Stdout)
-	l.write.http.Init(http.DefaultClientConfig, l.httpErrors)
 
 	lua.OpenLibraries(l.state)
 	l.loadUtils()
+	l.initHTTP()
 	if err = l.loadScript(); err != nil {
 		return
 	}
-	go l.pollHTTPErrors()
 	if l.cfg.tick > 0 {
 		l.quitticker = make(chan struct{})
 		go l.runTicker()
@@ -227,15 +226,15 @@ func (l *Sandbox) Init(scriptPath string, cfg *LuaConfig) (err error) {
 func (l *Sandbox) Close() {
 	l.luaLock.Lock()
 	defer l.luaLock.Unlock()
-	l.write.stdout.Flush()
-	l.write.http.Close()
 	if l.quitticker != nil {
 		l.quitticker <- struct{}{}
 		close(l.quitticker)
 		l.quitticker = nil
 	}
-	// exit http errors goroutine
-	close(l.httpErrors)
+	if l.http != nil {
+		l.http.Close()
+		close(l.httpErrors)
+	}
 	// marks sandbox as uninitialized
 	l.state = nil
 }
