@@ -1,3 +1,10 @@
+--
+-- This example makes full use of the provided builtins. If http server is detected,
+-- it will post the data there in JSON format otherwise logs are printed back to sdtout.
+--
+-- This is suplied to the logd binary: logd -R examples/summary.lua -f /var/log/mylog.log
+--
+
 http = false
 tick = 100
 
@@ -15,9 +22,9 @@ function on_log (logptr)
 	-- example usage of "get" builtin
 	flow = log_get(logptr, "flow")
 
-	-- example discard of log that doesn't have flow property set
+	-- example discard log
 	if flow == nil then
-		return nil
+		return
 	end
 
 	timestamp = log_get(logptr, "timestamp")
@@ -25,6 +32,7 @@ function on_log (logptr)
 	operation = log_get(logptr, "operation")
 	step = log_get(logptr, "step")
 	err = log_get(logptr, "err")
+
 	-- example usage of "log_reset" builtin
 	log_reset(logptr)
 
@@ -47,15 +55,16 @@ function on_log (logptr)
 	log_set(logptr, "luaRocks", "true")
 
 	if http then
+		-- makes use of "http_post" and "log_json" builtins
 		http_post("http://127.0.0.1:9091/qa/logging/smeagol", log_json(logptr), "application/json")
 		return
 	end
 
+	-- makes use of "log_string" builtin
 	print(log_string(logptr))
 end
 
 -- example usage of "config_set" builtin
--- set on_tick periodd. 0 disables the ticker
 config_set("tick", tick)
 
 -- example usage of "http_get" builtin
