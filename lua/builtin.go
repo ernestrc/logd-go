@@ -173,6 +173,10 @@ func luaHTTPPost(l *lua.State) int {
 	contentType := getArgString(l, 3, luaNameHTTPPostFn)
 	sandbox := getStateSandbox(l, 4)
 
+	if sandbox.http == nil {
+		sandbox.initHTTP()
+	}
+
 	// Avoid resource contention.
 	// If http errors goroutine is trying to acquire this lock to call on_http_error lua fn
 	// and the http requests channel is full, Post will block and thus create a deadlock

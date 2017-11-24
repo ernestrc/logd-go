@@ -1,7 +1,7 @@
 package lua
 
-// LuaConfig represents the configuration of a Sandbox
-type LuaConfig struct {
+// Config represents the configuration of a lua.Sandbox
+type Config struct {
 	// general
 	tick int
 }

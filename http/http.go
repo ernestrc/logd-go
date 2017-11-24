@@ -11,20 +11,20 @@ import (
 // Content of the responses is ignored and errors are reported via an non-buffered channel.
 // This client is useful for fire and forget use cases.
 type AsyncClient struct {
-	cfg       AsyncClientConfig
+	cfg       Config
 	reqchan   chan *http.Request
 	errorchan chan<- Error
 	quitchan  chan struct{}
 }
 
-// AsyncClientConfig is a AsyncClient configuration
-type AsyncClientConfig struct {
+// Config is a AsyncClient configuration
+type Config struct {
 	Concurrency int
 	ChanBuffer  int
 }
 
 // DefaultClientConfig is a client config with sane defaults
-var DefaultClientConfig = AsyncClientConfig{Concurrency: 4, ChanBuffer: 20}
+var DefaultClientConfig = Config{Concurrency: 4, ChanBuffer: 20}
 
 // Error is an HTTP request error. This includes both connectivity errors and non-2XX responses.
 type Error struct {
@@ -63,7 +63,7 @@ func poster(id int, reqchan chan *http.Request, errorchan chan<- Error, quitchan
 // If configuration is nil a default one will be used.
 func NewClient(errorchan chan<- Error) *AsyncClient {
 	w := new(AsyncClient)
-	w.Init(DefaultClientConfig, errorchan)
+	w.Init(nil, errorchan)
 	return w
 }
 
@@ -71,14 +71,14 @@ func NewClient(errorchan chan<- Error) *AsyncClient {
 // Calling Init after it is initialized will call Close first, flushing all the pending data, and re-initialize it.
 // After calling this method, changes to cfg will not have any effect. If new configuration is to be used, call Init again with
 // the updated configuration and client will updated.
-func (w *AsyncClient) Init(cfg AsyncClientConfig, errorchan chan<- Error) {
+func (w *AsyncClient) Init(cfg *Config, errorchan chan<- Error) {
 	if w.reqchan != nil {
 		w.Close()
 	}
-	if cfg.Concurrency == 0 {
+	if cfg == nil {
 		w.cfg = DefaultClientConfig
 	} else {
-		w.cfg = cfg
+		w.cfg = *cfg
 	}
 	w.errorchan = errorchan
 	w.reqchan = make(chan *http.Request, w.cfg.ChanBuffer)
@@ -117,9 +117,4 @@ func (w *AsyncClient) Close() error {
 	// marks client as uninitialized
 	w.reqchan = nil
 	return nil
-}
-
-// Config returns this client's configuration
-func (w *AsyncClient) Config() AsyncClientConfig {
-	return w.cfg
 }

@@ -27,8 +27,9 @@ type Sandbox struct {
 	luaLock    sync.Mutex
 	tickerLock sync.Mutex
 	state      *lua.State
+	httpConfig *http.Config
 	http       *http.AsyncClient
-	cfg        *LuaConfig
+	cfg        *Config
 	scriptPath string
 	// channel to internally terminate ticker
 	quitticker chan struct{}
@@ -52,15 +53,17 @@ func (l *Sandbox) setTick(tick int) {
 }
 
 func (l *Sandbox) setHTTPChannelBuffer(c int) {
-	cfg := l.http.Config()
-	cfg.ChanBuffer = c
-	l.http.Init(cfg, l.httpErrors)
+	l.httpConfig.ChanBuffer = c
+	if l.http != nil {
+		l.http.Init(l.httpConfig, l.httpErrors)
+	}
 }
 
 func (l *Sandbox) setHTTPConcurrency(c int) {
-	cfg := l.http.Config()
-	cfg.Concurrency = c
-	l.http.Init(cfg, l.httpErrors)
+	l.httpConfig.Concurrency = c
+	if l.http != nil {
+		l.http.Init(l.httpConfig, l.httpErrors)
+	}
 }
 
 func (l *Sandbox) loadUtils() {
@@ -166,7 +169,7 @@ func (l *Sandbox) pollHTTPErrors() {
 }
 
 // NewSandbox allocates storage and initializes a new Sandbox
-func NewSandbox(scriptPath string, cfg *LuaConfig) (l *Sandbox, err error) {
+func NewSandbox(scriptPath string, cfg *Config) (l *Sandbox, err error) {
 	l = new(Sandbox)
 	err = l.Init(scriptPath, cfg)
 	return
@@ -194,14 +197,14 @@ func (l *Sandbox) initHTTP() {
 
 // Init initializes l by instantiating a fresh lua state and loading the given script
 // along with the standard lua libraries in it. If cfg is nil, a default configuration is used.
-func (l *Sandbox) Init(scriptPath string, cfg *LuaConfig) (err error) {
+func (l *Sandbox) Init(scriptPath string, cfg *Config) (err error) {
 	if l.state != nil {
 		l.Close()
 	}
 	if cfg != nil {
 		l.cfg = cfg
 	} else {
-		l.cfg = &LuaConfig{
+		l.cfg = &Config{
 			tick: 0,
 		}
 	}
@@ -210,7 +213,6 @@ func (l *Sandbox) Init(scriptPath string, cfg *LuaConfig) (err error) {
 
 	lua.OpenLibraries(l.state)
 	l.loadUtils()
-	l.initHTTP()
 	if err = l.loadScript(); err != nil {
 		return
 	}
