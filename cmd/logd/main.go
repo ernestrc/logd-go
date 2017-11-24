@@ -15,6 +15,7 @@ import (
 	"syscall"
 
 	"github.com/ernestrc/logd/logging"
+	"github.com/ernestrc/logd/lua"
 )
 
 const pprofServer = "localhost:6060"
@@ -73,7 +74,7 @@ func init() {
 	}
 }
 
-func runPipeline(l *logging.LuaSandbox, exit chan<- error, reader io.Reader) {
+func runPipeline(l *lua.Sandbox, exit chan<- error, reader io.Reader) {
 	p := logging.NewParser()
 
 	logs := make([]logging.Log, 0)
@@ -161,7 +162,7 @@ func memProfile() *os.File {
 	return createProfileFile(*memProfileFlag)
 }
 
-func sigHandler(l *logging.LuaSandbox, script string, exit chan error, sig chan os.Signal) {
+func sigHandler(l *lua.Sandbox, script string, exit chan error, sig chan os.Signal) {
 	for sig := range sig {
 		fmt.Fprintf(os.Stderr, "received: %s\n", sig)
 		switch sig {
@@ -190,7 +191,7 @@ func runPprofServer(exit chan error) {
 
 func main() {
 	var err error
-	var l *logging.LuaSandbox
+	var l *lua.Sandbox
 
 	flag.Parse()
 	script := validateFlags()
@@ -202,7 +203,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	l, err = logging.NewLuaSandbox(script, nil)
+	l, err = lua.NewSandbox(script, nil)
 	if err != nil {
 		exitError(err)
 	}

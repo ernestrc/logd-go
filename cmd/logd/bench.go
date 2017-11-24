@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	"github.com/ernestrc/logd/logging"
+	"github.com/ernestrc/logd/lua"
 )
 
 var benchLogs = []logging.Log{}
-var benchSandbox *logging.LuaSandbox
+var benchSandbox *lua.Sandbox
 var benchParser *logging.Parser
 var benchData []byte
 
@@ -54,7 +55,7 @@ func printRes(b []byte, res testing.BenchmarkResult) {
 		logsSec, allocsSec, mbSec, processedMbSec)
 }
 
-func runLuaBench(l *logging.LuaSandbox, exit chan<- error, reader io.Reader) {
+func runLuaBench(l *lua.Sandbox, exit chan<- error, reader io.Reader) {
 	p := logging.NewParser()
 	benchSandbox = l
 
@@ -69,7 +70,7 @@ func runLuaBench(l *logging.LuaSandbox, exit chan<- error, reader io.Reader) {
 	exit <- nil
 }
 
-func runFullBench(l *logging.LuaSandbox, exit chan<- error, reader io.Reader) {
+func runFullBench(l *lua.Sandbox, exit chan<- error, reader io.Reader) {
 	var err error
 	benchParser = logging.NewParser()
 	benchSandbox = l
