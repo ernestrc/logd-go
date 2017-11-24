@@ -9,8 +9,8 @@ type Config struct {
 /* configuration updated via builtin `config(key str, value str)`*/
 const (
 	luaConfigTick              = "tick"
-	luaConfigHTTPConcurrency   = "http_concurrency"
-	luaConfigHTTPChannelBuffer = "http_channel_buffer"
+	luaConfigHTTPConcurrency   = "http.concurrency"
+	luaConfigHTTPChannelBuffer = "http.channel_buffer"
 )
 
 var availableConfigKeys = []string{

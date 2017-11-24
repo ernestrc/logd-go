@@ -5,6 +5,7 @@
 -- This is suplied to the logd binary: logd -R examples/summary.lua -f /var/log/mylog.log
 --
 
+kafkaoffset = nil
 http = false
 tick = 100
 
@@ -12,6 +13,10 @@ function on_tick ()
 	tick = tick * 2
 	config_set("tick", tick)
 	print(string.format("next tick: %d", tick))
+end
+
+function on_kafka_error (topic, partition, offset, err, payload)
+	print(err)
 end
 
 function on_http_error (url, method, err)
@@ -54,6 +59,13 @@ function on_log (logptr)
 
 	log_set(logptr, "luaRocks", "true")
 
+	if kafkaoffset ~= nil then
+		-- makes use of "kafka_post" and "log_json" builtins
+		-- -1 partition indicates that any partition can be used
+		kafka_post("", log_json(logptr), "my_topic", -1, kafkaoffset)
+		return
+	end
+
 	if http then
 		-- makes use of "http_post" and "log_json" builtins
 		http_post("http://127.0.0.1:9091/qa/logging/smeagol", log_json(logptr), "application/json")
@@ -74,7 +86,14 @@ if err ~= nil then
 	print(string.format("logging server not found: %s", err))
 else
 	print(string.format("logging server found: %s", res))
-	config_set("http_concurrency", 4)
-	config_set("http_channel_buffer", 20)
+	config_set("http.concurrency", 4)
+	config_set("http.channel_buffer", 20)
 	http = true
 end
+
+-- example kafka configuration
+kafkaoffset, err = kafka_offset("1234")
+if err ~= nil then
+	print(string.format("error when creating new kafka offset: %s", err))
+end
+config_set("kafka.bootstrap.servers", "http://localhost:9092")

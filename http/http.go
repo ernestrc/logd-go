@@ -23,8 +23,8 @@ type Config struct {
 	ChanBuffer  int
 }
 
-// DefaultClientConfig is a client config with sane defaults
-var DefaultClientConfig = Config{Concurrency: 4, ChanBuffer: 20}
+// DefaultConfig is a client config with sane defaults
+var DefaultConfig = Config{Concurrency: 4, ChanBuffer: 20}
 
 // Error is an HTTP request error. This includes both connectivity errors and non-2XX responses.
 type Error struct {
@@ -76,7 +76,7 @@ func (w *AsyncClient) Init(cfg *Config, errorchan chan<- Error) {
 		w.Close()
 	}
 	if cfg == nil {
-		w.cfg = DefaultClientConfig
+		w.cfg = DefaultConfig
 	} else {
 		w.cfg = *cfg
 	}

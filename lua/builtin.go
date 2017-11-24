@@ -6,25 +6,27 @@ import (
 	stdHttp "net/http"
 
 	lua "github.com/Shopify/go-lua"
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/ernestrc/logd/logging"
 )
 
-// TODO add kafka_post function
 // TODO add elastic_post function
 // TODO add graphite_post function
 // TODO add netdata_post function
 // TODO add s3_post function
 
 const (
-	luaNameConfigFn    = "config_set"
-	luaNameHTTPGetFn   = "http_get"
-	luaNameHTTPPostFn  = "http_post"
-	luaNameGetFn       = "log_get"
-	luaNameSetFn       = "log_set"
-	luaNameRemoveFn    = "log_remove"
-	luaNameResetFn     = "log_reset"
-	luaNameLogStringFn = "log_string"
-	luaNameLogJSONFn   = "log_json"
+	luaNameConfigFn      = "config_set"
+	luaNameHTTPGetFn     = "http_get"
+	luaNameHTTPPostFn    = "http_post"
+	luaNameKafkaPostFn   = "kafka_post"
+	luaNameKafkaOffsetFn = "kafka_offset"
+	luaNameGetFn         = "log_get"
+	luaNameSetFn         = "log_set"
+	luaNameRemoveFn      = "log_remove"
+	luaNameResetFn       = "log_reset"
+	luaNameLogStringFn   = "log_string"
+	luaNameLogJSONFn     = "log_json"
 )
 
 func getArgLogPtr(l *lua.State, i int, fn string) *logging.Log {
@@ -35,6 +37,16 @@ func getArgLogPtr(l *lua.State, i int, fn string) *logging.Log {
 			i, fn, l.TypeOf(i)))
 	}
 	return log
+}
+
+func getArgKafkaOffset(l *lua.State, i int, fn string) kafka.Offset {
+	offset, ok := l.ToUserData(i).(kafka.Offset)
+	if !ok {
+		panic(fmt.Sprintf(
+			"%d argument must be a pointer to an offset in call to builtin '%s' function: found %s",
+			i, fn, l.TypeOf(i)))
+	}
+	return offset
 }
 
 func getArgString(l *lua.State, i int, fn string) string {
@@ -127,8 +139,10 @@ func luaSetConfig(l *lua.State) int {
 	case luaConfigHTTPChannelBuffer:
 		sandbox.setHTTPChannelBuffer(getArgInt(l, 2, luaNameConfigFn+"#"+luaConfigHTTPChannelBuffer))
 	default:
-		panic(fmt.Sprintf("unknown config key in call to `%s`: '%s'. Available keys: %v",
-			luaNameConfigFn, key, availableConfigKeys))
+		if !sandbox.setKafkaConfig(key, l.ToUserData(2)) {
+			panic(fmt.Sprintf("unknown config key in call to `%s`: '%s'. Available keys: %v",
+				luaNameConfigFn, key, availableConfigKeys))
+		}
 	}
 	return 0
 }
@@ -187,6 +201,68 @@ func luaHTTPPost(l *lua.State) int {
 		panic(err)
 	}
 	return 0
+}
+
+// luaKafkaPost will produce a kafka message with the given key and value asynchronously.
+// lua signature is function kafka_post(key, value, topic, partition, offsetptr)
+// If partition is set to -1, any partition is used. A new offset can be created by using
+// kafka_offset builtin.
+func luaKafkaPost(l *lua.State) int {
+	key := getArgString(l, 1, luaNameKafkaPostFn)
+	value := getArgString(l, 2, luaNameKafkaPostFn)
+	topic := getArgString(l, 3, luaNameKafkaPostFn)
+	partition := int32(getArgInt(l, 4, luaNameKafkaPostFn))
+	offset := getArgKafkaOffset(l, 5, luaNameKafkaPostFn)
+	sandbox := getStateSandbox(l, 6)
+
+	if sandbox.kafka == nil {
+		sandbox.initKafka()
+	}
+
+	var keyB []byte
+	var valueB []byte
+
+	if key == "" {
+		keyB = nil
+	} else {
+		keyB = []byte(key)
+	}
+
+	if value == "" {
+		valueB = nil
+	} else {
+		valueB = []byte(value)
+	}
+
+	message := &kafka.Message{
+		TopicPartition: kafka.TopicPartition{
+			Topic:     &topic,
+			Partition: partition,
+			Offset:    offset,
+		},
+		Key:   keyB,
+		Value: valueB,
+	}
+
+	sandbox.luaLock.Unlock()
+	defer sandbox.luaLock.Lock()
+	sandbox.kafka.ProduceChannel() <- message
+	return 0
+}
+
+// luaKafkaOffset will create a new named offset.
+// lua signature is function kafka_offset(name) offsetptr, err
+func luaKafkaOffset(l *lua.State) int {
+	name := getArgString(l, 1, luaNameKafkaOffsetFn)
+	offset, err := kafka.NewOffset(name)
+	if err != nil {
+		l.PushNil()
+		l.PushString(fmt.Sprintf("%s", err))
+	} else {
+		l.PushUserData(offset)
+		l.PushNil()
+	}
+	return 2
 }
 
 // luaLogString will serialize the log and return it as a string in the otlog format.
