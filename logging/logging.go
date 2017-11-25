@@ -104,7 +104,7 @@ func (l *Log) Set(key string, value string) (upsert bool) {
 		}
 		o := strings.Split(value, " ")
 		if len(o) != 2 {
-			panic(fmt.Sprintf("invalid timestamp format: %s", value))
+			panic(fmt.Errorf("invalid timestamp format: %s", value))
 		}
 		l.date = o[0]
 		l.time = o[1]

@@ -3,7 +3,6 @@ package lua
 import (
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,10 +17,10 @@ const (
 	luaNameSandboxContext = "lsb_context"
 
 	/* lua functions provided by client script */
-	luaNameOnLogFn        = "on_log"
-	luaNameOnTickFn       = "on_tick"
-	luaNameOnHTTPErrorFn  = "on_http_error"
-	luaNameOnKafkaErrorFn = "on_kafka_error"
+	luaNameOnLogFn         = "on_log"
+	luaNameOnTickFn        = "on_tick"
+	luaNameOnHTTPErrorFn   = "on_http_error"
+	luaNameOnKafkaReportFn = "on_kafka_report"
 )
 
 // Sandbox represents a lua VM wich exposes a series of builtin functions
@@ -56,33 +55,6 @@ func (l *Sandbox) setTick(tick int) {
 	}
 }
 
-func (l *Sandbox) setKafkaConfig(key string, value interface{}) bool {
-	if !strings.HasPrefix(key, "kafka.") {
-		return false
-	}
-	key = strings.TrimLeft(key, "kafka.")
-	l.kafkaConfig.SetKey(key, value)
-	// FIXME tear down and re-initialize
-	// if l.kafka != nil {
-	// 	l.kafka.Close()
-	// }
-	return true
-}
-
-func (l *Sandbox) setHTTPChannelBuffer(c int) {
-	l.httpConfig.ChanBuffer = c
-	if l.http != nil {
-		l.http.Init(l.httpConfig, l.httpErrors)
-	}
-}
-
-func (l *Sandbox) setHTTPConcurrency(c int) {
-	l.httpConfig.Concurrency = c
-	if l.http != nil {
-		l.http.Init(l.httpConfig, l.httpErrors)
-	}
-}
-
 func (l *Sandbox) loadUtils() {
 	l.state.PushGoFunction(luaHTTPGet)
 	l.state.SetGlobal(luaNameHTTPGetFn)
@@ -114,8 +86,11 @@ func (l *Sandbox) loadUtils() {
 	l.state.PushGoFunction(luaKafkaOffset)
 	l.state.SetGlobal(luaNameKafkaOffsetFn)
 
-	l.state.PushGoFunction(luaKafkaPost)
-	l.state.SetGlobal(luaNameKafkaPostFn)
+	l.state.PushGoFunction(luaKafkaMessage)
+	l.state.SetGlobal(luaNameKafkaMessageFn)
+
+	l.state.PushGoFunction(luaKafkaProduce)
+	l.state.SetGlobal(luaNameKafkaProduceFn)
 
 	l.state.PushUserData(l)
 	l.state.SetGlobal(luaNameSandboxContext)
@@ -123,16 +98,10 @@ func (l *Sandbox) loadUtils() {
 
 func (l *Sandbox) loadScript() error {
 	if err := lua.DoFile(l.state, l.scriptPath); err != nil {
-		panic(err)
-		// return fmt.Errorf("there was an error when loading script: %s", err)
+		return fmt.Errorf("there was an error when loading script: %s", err)
 	}
 
 	return nil
-}
-
-func (l *Sandbox) printStackInfo() {
-	last, top := l.state.GetStackLastTop()
-	fmt.Fprintf(os.Stderr, "last=%d top=%d\n", last, top)
 }
 
 func (l *Sandbox) callOnTick() bool {
@@ -162,68 +131,6 @@ func (l *Sandbox) runTicker() {
 			}
 		case <-l.quitticker:
 			return
-		}
-	}
-}
-
-func (l *Sandbox) callOnHTTPError(e http.Error) {
-	l.luaLock.Lock()
-	defer l.luaLock.Unlock()
-	l.state.Global(luaNameOnHTTPErrorFn)
-	if !l.state.IsFunction(-1) {
-		l.state.Pop(-1)
-		return
-	}
-
-	url := e.Request.URL.String()
-	method := e.Request.Method
-	err := fmt.Sprintf("%s", e.Err)
-
-	l.state.PushString(url)
-	l.state.PushString(method)
-	l.state.PushString(err)
-	l.state.Call(4, 0)
-}
-
-func (l *Sandbox) callOnKafkaError(m *kafka.Message) {
-	l.luaLock.Lock()
-	defer l.luaLock.Unlock()
-	l.state.Global(luaNameOnKafkaErrorFn)
-	if !l.state.IsFunction(-1) {
-		l.state.Pop(-1)
-		return
-	}
-
-	topic := *m.TopicPartition.Topic
-	partition := int(m.TopicPartition.Partition)
-	offset := int(m.TopicPartition.Offset)
-	err := m.TopicPartition.Error.Error()
-
-	l.state.PushString(topic)
-	l.state.PushInteger(partition)
-	l.state.PushInteger(offset)
-	l.state.PushString(fmt.Sprintf("error when producing message to topic '%s' at partition %d with offset %d: %s",
-		topic, partition, offset, err))
-	l.state.PushString(string(m.Value))
-	l.state.Call(5, 0)
-}
-
-func (l *Sandbox) pollHTTPErrors() {
-	for err := range l.httpErrors {
-		l.callOnHTTPError(err)
-	}
-}
-
-func (l *Sandbox) pollKafkaEvents() {
-	for ev := range l.kafka.Events() {
-		switch ev.(type) {
-		case *kafka.Message:
-			m := ev.(*kafka.Message)
-			l.callOnKafkaError(m)
-		case *kafka.Error:
-			// TODO do something with error
-		default:
-			panic(fmt.Sprintf("unexpected kafka event: %s", ev))
 		}
 	}
 }
@@ -288,9 +195,6 @@ func (l *Sandbox) Init(scriptPath string, cfg *Config) (err error) {
 
 	lua.OpenLibraries(l.state)
 	l.loadUtils()
-	if err = l.initKafka(); err != nil {
-		return
-	}
 	if err = l.loadScript(); err != nil {
 		return
 	}
@@ -316,7 +220,10 @@ func (l *Sandbox) Close() {
 		close(l.httpErrors)
 	}
 	if l.kafka != nil {
-		// FIXME
+		// TODO unflushed := l.kafka.Flush(l.cfg.flushTimeout)
+		if unflushed := l.kafka.Flush(10000); unflushed > 0 {
+			fmt.Fprintf(os.Stderr, "failed to flush %d kafka messages", unflushed)
+		}
 		l.kafka.Close()
 	}
 	// marks sandbox as uninitialized
