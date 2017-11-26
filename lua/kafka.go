@@ -11,8 +11,9 @@ import (
 )
 
 func getArgKafkaOffset(l *lua.State, i int, fn string) kafka.Offset {
-	offset, ok := l.ToUserData(i).(kafka.Offset)
-	if !ok {
+	userData := l.ToUserData(i)
+	offset, ok := userData.(kafka.Offset)
+	if !ok && userData != nil {
 		panic(fmt.Errorf(
 			"%d argument must be a pointer to an offset in call to builtin '%s' function: found %s",
 			i, fn, l.TypeOf(i)))

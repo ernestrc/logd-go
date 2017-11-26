@@ -4,7 +4,7 @@
 --
 local kafkaoffset
 
-kafkaHost = "127.0.0.0:32769"
+kafkaHost = "localhost:9092"
 kafkaTopic = "my_topic"
 kafkaMsgs = 0
 kafkaErrors = 0
@@ -26,7 +26,7 @@ function on_log (logptr)
 	if kafkaoffset ~= nil then
 		-- makes use of "kafka_message" and "kafka_produce" builtins
 		-- -1 partition indicates that any partition can be used
-		msgptr = kafka_message("", log_json(logptr), kafkaTopic, -1, kafkaoffset)
+		msgptr = kafka_message("", log_json(logptr), kafkaTopic, -1, nil)
 		kafka_produce(msgptr)
 		return
 	end
