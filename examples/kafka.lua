@@ -1,5 +1,6 @@
 --
 -- This example makes use of the kafka client. Logs are serialized into JSON and produced to a test kafka topic.
+-- Check https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md for more kafka configuration options.
 -- This can be suplied to the logd executable: logd -R examples/kafka.lua -f /var/log/mylog.log
 --
 local kafkaoffset
@@ -32,13 +33,22 @@ function on_log (logptr)
 	end
 end
 
+config_set("tick", 100)
+
 kafkaoffset, err = kafka_offset("1234")
+
 if err ~= nil then
 	print(string.format("error when creating new kafka offset: %s", err))
 else
 	print(string.format("created new kafka offset: %s", kafkaoffset))
+	config_set("kafka.go.batch.producer", false)
+	config_set("kafka.go.produce.channel.size", 0)
+	config_set("kafka.go.events.channel.size", 0)
+
 	config_set("kafka.bootstrap.servers", kafkaHost)
+
 	-- config_set("kafka.debug", "broker,topic,msg")
-	config_set("kafka.socket.timeout.ms", 4000)
-	config_set("kafka.group.id", "my_id")
+	config_set("kafka.retries", 0)
+	config_set("kafka.retry.backoff.ms", 100)
+	-- config_set("kafka.delivery.report.only.error", true)
 end

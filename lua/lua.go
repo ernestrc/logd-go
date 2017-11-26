@@ -2,7 +2,6 @@ package lua
 
 import (
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -192,6 +191,7 @@ func (l *Sandbox) Init(scriptPath string, cfg *Config) (err error) {
 
 	kafkaConfig := kafka.ConfigMap(make(map[string]kafka.ConfigValue))
 	l.kafkaConfig = &kafkaConfig
+	setSaneKafkaDefaults(l.kafkaConfig)
 
 	lua.OpenLibraries(l.state)
 	l.loadUtils()
@@ -203,6 +203,20 @@ func (l *Sandbox) Init(scriptPath string, cfg *Config) (err error) {
 		go l.runTicker()
 	}
 	return nil
+}
+
+func (l *Sandbox) closeKafka() {
+	// make sure that we do not double lock
+	// this lock is acquired by Close to make sure that access to l.quitticker, l.http, and l.kafka
+	// is synchronized. In order to flush, we need to release the lock so on_kafka_report can acquire lock
+	// and run the lua logic
+	l.luaLock.Unlock()
+	defer l.luaLock.Lock()
+	timeout := l.getFlushTimeout()
+	if unflushed := l.kafka.Flush(timeout); unflushed > 0 {
+		panic(fmt.Errorf("failed to flush %d kafka messages", unflushed))
+	}
+	l.kafka.Close()
 }
 
 // Close will shut down all the resources held by this Sandbox and flush all the
@@ -220,11 +234,7 @@ func (l *Sandbox) Close() {
 		close(l.httpErrors)
 	}
 	if l.kafka != nil {
-		// TODO unflushed := l.kafka.Flush(l.cfg.flushTimeout)
-		if unflushed := l.kafka.Flush(10000); unflushed > 0 {
-			fmt.Fprintf(os.Stderr, "failed to flush %d kafka messages", unflushed)
-		}
-		l.kafka.Close()
+		l.closeKafka()
 	}
 	// marks sandbox as uninitialized
 	l.state = nil

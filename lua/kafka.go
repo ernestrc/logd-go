@@ -10,6 +10,11 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
+const (
+	kafkaDefaultRequestTimeout = 5000
+	kafkaDefaultMessageTimeout = kafkaDefaultRequestTimeout * 2
+)
+
 func getArgKafkaOffset(l *lua.State, i int, fn string) kafka.Offset {
 	userData := l.ToUserData(i)
 	offset, ok := userData.(kafka.Offset)
@@ -182,4 +187,39 @@ func (l *Sandbox) pollKafkaEvents() {
 			panic(fmt.Errorf("unexpected kafka event: %s", ev))
 		}
 	}
+}
+
+// depends on client configuration, we need to make sure that all message reports have
+// been delivered and client has received all errors
+func (l *Sandbox) getFlushTimeout() int {
+	v, err := l.kafkaConfig.Get("message.timeout.ms", kafkaDefaultMessageTimeout)
+	if err != nil {
+		panic(err)
+	}
+	return v.(int) * 2
+}
+
+// Sets the following kafka config properties:
+//
+//   kafka.go.batch.producer (bool, false) - Enable batch producer (experimental for increased performance).
+//                                     These batches do not relate to Kafka message batches in any way.
+//   kafka.go.delivery.reports (bool, true) - Forward per-message delivery reports to the
+//                                      Events() channel.
+//   kafka.go.events.channel.size (int, 100) - Events() channel size
+//   kafka.go.produce.channel.size (int, 100) - ProduceChannel() buffer size (in number of messages)
+func setSaneKafkaDefaults(config *kafka.ConfigMap) {
+	config.SetKey("go.batch.producer", false)
+	config.SetKey("go.delivery.reports", true)
+	config.SetKey("go.events.channel.size", 100)
+	config.SetKey("go.produce.channel.size", 100)
+	config.SetKey("queue.buffering.max.messages", 10000)
+	config.SetKey("socket.timeout.ms", 5000)
+
+	config.SetKey("default.topic.config", kafka.ConfigMap{
+		"request.required.acks": 1,
+		// once message is produced, ack timeout
+		"request.timeout.ms": kafkaDefaultRequestTimeout,
+		// locally limits the time a produced message waits for successful delivery
+		"message.timeout.ms": kafkaDefaultMessageTimeout,
+	})
 }

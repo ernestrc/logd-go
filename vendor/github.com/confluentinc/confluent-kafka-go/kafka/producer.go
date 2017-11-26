@@ -241,6 +241,8 @@ func (p *Producer) Flush(timeoutMs int) int {
 			int(math.Min(100, remain*1000)), 1000, termChan)
 	}
 
+	close(termChan)
+
 	return 0
 }
 

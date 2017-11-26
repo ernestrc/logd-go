@@ -24,7 +24,7 @@ type Config struct {
 }
 
 // DefaultConfig is a client config with sane defaults
-var DefaultConfig = Config{Concurrency: 4, ChanBuffer: 20}
+var DefaultConfig = Config{Concurrency: 4, ChanBuffer: 100}
 
 // Error is an HTTP request error. This includes both connectivity errors and non-2XX responses.
 type Error struct {

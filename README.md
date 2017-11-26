@@ -10,5 +10,4 @@ Use cases:
 - Full-fledged log collector
 
 ### TODO
-- Kafka output mode
 - FreeSwitch input format
