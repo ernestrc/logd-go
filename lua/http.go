@@ -95,7 +95,7 @@ func (l *Sandbox) callOnHTTPError(e http.Error) {
 	l.state.PushString(url)
 	l.state.PushString(method)
 	l.state.PushString(err)
-	l.state.Call(4, 0)
+	l.state.Call(3, 0)
 }
 
 func (l *Sandbox) pollHTTPErrors() {
