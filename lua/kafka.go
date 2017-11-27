@@ -223,3 +223,10 @@ func setSaneKafkaDefaults(config *kafka.ConfigMap) {
 		"message.timeout.ms": kafkaDefaultMessageTimeout,
 	})
 }
+
+func (l *Sandbox) flushKafka() {
+	timeout := l.getFlushTimeout()
+	if unflushed := l.kafka.Flush(timeout); unflushed > 0 {
+		panic(fmt.Errorf("failed to flush %d kafka messages", unflushed))
+	}
+}

@@ -5,13 +5,16 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // AsyncClient is an HTTP client which submits requests asynchronously and concurrently.
 // Content of the responses is ignored and errors are reported via an non-buffered channel.
 // This client is useful for fire and forget use cases.
 type AsyncClient struct {
-	cfg       Config
+	cfg Config
+	// used to synchronize flush and new request submits
+	lock      sync.Mutex
 	reqchan   chan *http.Request
 	errorchan chan<- Error
 	quitchan  chan struct{}
@@ -67,6 +70,13 @@ func NewClient(errorchan chan<- Error) *AsyncClient {
 	return w
 }
 
+func (w *AsyncClient) initWorkers() {
+	w.reqchan = make(chan *http.Request, w.cfg.ChanBuffer)
+	for i := 0; i < w.cfg.Concurrency; i++ {
+		go poster(i, w.reqchan, w.errorchan, w.quitchan)
+	}
+}
+
 // Init initializes this AsyncClient so it is ready for use.
 // Calling Init after it is initialized will call Close first, flushing all the pending data, and re-initialize it.
 // After calling this method, changes to cfg will not have any effect. If new configuration is to be used, call Init again with
@@ -81,11 +91,8 @@ func (w *AsyncClient) Init(cfg *Config, errorchan chan<- Error) {
 		w.cfg = *cfg
 	}
 	w.errorchan = errorchan
-	w.reqchan = make(chan *http.Request, w.cfg.ChanBuffer)
 	w.quitchan = make(chan struct{})
-	for i := 0; i < w.cfg.Concurrency; i++ {
-		go poster(i, w.reqchan, w.errorchan, w.quitchan)
-	}
+	w.initWorkers()
 }
 
 // Post makes an HTTP post to the given url and sets the Content-Type header accordingly
@@ -98,21 +105,34 @@ func (w *AsyncClient) Post(url string, payload string, contentType string) (n in
 	req.Header.Add("Content-Type", contentType)
 
 	if w.reqchan == nil {
-		panic("called Write before writer was initialized or after Flush was called")
+		panic("called Write before writer was initialized or after Close was called")
 	}
 
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	w.reqchan <- req
 	return
+}
+
+func (w *AsyncClient) Flush() {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	w.stopWorkers()
+	w.initWorkers()
+}
+
+func (w *AsyncClient) stopWorkers() {
+	close(w.reqchan)
+	for i := 0; i < w.cfg.Concurrency; i++ {
+		<-w.quitchan
+	}
 }
 
 // Close will block until all data has been written.
 // In order to use again this client instance Init must be used to initialize its resources
 func (w *AsyncClient) Close() error {
-	close(w.reqchan)
 	// wait for goroutines to finish the work
-	for i := 0; i < w.cfg.Concurrency; i++ {
-		<-w.quitchan
-	}
+	w.stopWorkers()
 	close(w.quitchan)
 	// marks client as uninitialized
 	w.reqchan = nil

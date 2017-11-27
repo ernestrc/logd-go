@@ -100,6 +100,7 @@ func benchFullPipeline(b *testing.B) {
 		}
 		benchLogs = benchLogs[:0]
 	}
+	benchSandbox.Flush()
 }
 
 func benchLuaScriptOnly(b *testing.B) {
@@ -111,4 +112,5 @@ func benchLuaScriptOnly(b *testing.B) {
 			}
 		}
 	}
+	benchSandbox.Flush()
 }

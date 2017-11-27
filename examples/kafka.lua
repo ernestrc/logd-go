@@ -42,13 +42,12 @@ if err ~= nil then
 else
 	print(string.format("created new kafka offset: %s", kafkaoffset))
 	config_set("kafka.go.batch.producer", false)
-	config_set("kafka.go.produce.channel.size", 0)
-	config_set("kafka.go.events.channel.size", 0)
-
-	config_set("kafka.bootstrap.servers", kafkaHost)
+	config_set("kafka.go.produce.channel.size", 100)
+	config_set("kafka.go.events.channel.size", 100)
+	config_set("kafka.retries", 1)
+	config_set("kafka.retry.backoff.ms", 1000)
 
 	-- config_set("kafka.debug", "broker,topic,msg")
-	config_set("kafka.retries", 0)
-	config_set("kafka.retry.backoff.ms", 100)
 	-- config_set("kafka.delivery.report.only.error", true)
+	config_set("kafka.bootstrap.servers", kafkaHost)
 end
