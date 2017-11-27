@@ -33,6 +33,9 @@ Lua libraries included:
 - Event/Error notification
 - Log validation and/or sanitization
 
+## Build
+If you do not have librdkafka (v0.11.1) installed on your system and if you have docker installed, you can use `make static` to compile and statically link a logd executable without needing to install any dependencies.
+
 ### TODO
 - Add more input parsers. i.e.:
 	- https://en.wikipedia.org/wiki/Common_Log_Format

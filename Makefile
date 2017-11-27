@@ -42,7 +42,8 @@ static: $(TARGET)
 	@ cp -R ./cmd $(SRC)
 	@ cp -R ./vendor $(SRC)
 	@ [ ! -z $(docker images -q $(BUILD_IMAGE)) ] || docker build -t $(BUILD_IMAGE) ./tools/
-	docker run --rm -v $(SRC):$(CONT_SRC) -v $(TARGET):$(CONT_TARGET) $(BUILD_IMAGE)
+	@ docker run --rm -v $(SRC):$(CONT_SRC) -v $(TARGET):$(CONT_TARGET) $(BUILD_IMAGE)
+	@ echo "successfully compiled $(TARGET)/logd"
 
 clean:
 	@rm -rf $(TARGET)
