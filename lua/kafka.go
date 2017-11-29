@@ -182,7 +182,7 @@ func (l *Sandbox) pollKafkaEvents() {
 		case *kafka.Message:
 			l.callOnKafkaReport(ev.(*kafka.Message))
 		case *kafka.Error:
-			fmt.Fprintf(os.Stderr, "kafka error: %+v", ev)
+			fmt.Fprintf(os.Stderr, "kafka error: %+v\n", ev)
 		default:
 			panic(fmt.Errorf("unexpected kafka event: %s", ev))
 		}

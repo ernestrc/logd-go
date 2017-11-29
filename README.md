@@ -27,6 +27,13 @@ Lua libraries included:
 - math
 - debug
 
+## Parser
+For now, the parser expects logs to be in the following format:
+```
+YYYY-MM-dd hh:mm:ss	LEVEL	[Thread]	Class	key: value...
+```
+More parsers will be added in the future
+
 ## Use cases:
 - Local aggregation of data
 - Dynamic down-sampling
@@ -38,6 +45,6 @@ If you do not have librdkafka (v0.11.1) installed on your system and if you have
 
 ### TODO
 - Add more input parsers. i.e.:
-	- https://en.wikipedia.org/wiki/Common_Log_Format
+	- https://en.wikipedia.org/wiki/Common\_Log\_Format
 - Add query API
 - Add directory monitoring flag

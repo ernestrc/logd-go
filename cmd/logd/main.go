@@ -20,15 +20,29 @@ import (
 
 const pprofServer = "localhost:6060"
 
+type dirFlagType []string
+
+func (d *dirFlagType) String() (s string) {
+	for _, v := range *d {
+		s += v
+	}
+	return
+}
+
+func (d *dirFlagType) Set(v string) error {
+	*d = append(*d, v)
+	return nil
+}
+
+// TODO check that bench is not being called with -d flag
 var scriptFlag = flag.String("R", "", "Run Lua script processing pipeline")
 var benchFlag = flag.String("B", "", "Benchmark Lua script processing pipeline")
 var fullBenchFlag = flag.String("F", "", "Benchmark full processing pipeline (log parsing + lua processing)")
 var fileFlag = flag.String("f", "/dev/stdin", "File to read data from")
 var cpuProfileFlag = flag.String("p", "", "write cpu profile to file")
 var memProfileFlag = flag.String("m", "", "write mem profile to file on SIGUSR2")
-var debugFlag = flag.Bool("d", false, fmt.Sprintf("start a pprof server at %s", pprofServer))
-
-// TODO add monitor directory flag fsnotify
+var profServer = flag.Bool("s", false, fmt.Sprintf("start a pprof server at %s", pprofServer))
+var dirFlag dirFlagType
 
 func printFlag(f *flag.Flag) {
 	s := fmt.Sprintf("\t-%s", f.Name)
@@ -105,20 +119,25 @@ func runPipeline(l *lua.Sandbox, exit chan<- error, reader io.Reader) {
 	}
 }
 
-func exitError(err error) {
+func usageError(err error) {
 	fmt.Fprintf(os.Stderr, "error: %s\n\n", err)
 	flag.Usage()
 	os.Exit(1)
 }
 
+func exitError(err error) {
+	fmt.Fprintf(os.Stderr, "error: %s\n\n", err)
+	os.Exit(1)
+}
+
 func validateFlags() string {
 	if *scriptFlag == "" && *benchFlag == "" && *fullBenchFlag == "" {
-		exitError(fmt.Errorf("no lua script provided"))
+		usageError(fmt.Errorf("no lua script provided"))
 	}
 	if (*scriptFlag != "" && *benchFlag != "") ||
 		(*fullBenchFlag != "" && *benchFlag != "") ||
 		(*fullBenchFlag != "" && *scriptFlag != "") {
-		exitError(fmt.Errorf("only one mode is allowed"))
+		usageError(fmt.Errorf("only one mode is allowed"))
 	}
 	if *scriptFlag != "" {
 		return *scriptFlag
@@ -131,12 +150,32 @@ func validateFlags() string {
 	return *benchFlag
 }
 
-func getReader() io.Reader {
+type bufioReadCloser struct {
+	bufio.Reader
+}
+
+func (b *bufioReadCloser) Close() error {
+	return nil
+}
+
+func getReader() (io.ReadCloser, error) {
+	if len(dirFlag) != 0 {
+		reader, err := NewReader()
+		if err != nil {
+			panic(err)
+		}
+		for _, dir := range dirFlag {
+			if err := reader.Watch(dir); err != nil {
+				return nil, err
+			}
+		}
+		return reader, nil
+	}
 	reader, err := os.Open(*fileFlag)
 	if err != nil {
 		exitError(err)
 	}
-	return bufio.NewReader(reader)
+	return &bufioReadCloser{*bufio.NewReader(reader)}, nil
 }
 
 func createProfileFile(name string) *os.File {
@@ -193,12 +232,13 @@ func main() {
 	var err error
 	var l *lua.Sandbox
 
+	flag.Var(&dirFlag, "d", "Monitor directory recursively, ingesting all the new data written to files. Overrides -f flag")
 	flag.Parse()
 	script := validateFlags()
 
 	if f := cpuProfile(); f != nil {
 		if err = pprof.StartCPUProfile(f); err != nil {
-			fmt.Fprintf(os.Stderr, "could not start cpu profile: %v", err)
+			fmt.Fprintf(os.Stderr, "could not start cpu profile: %v\n", err)
 		}
 		defer pprof.StopCPUProfile()
 	}
@@ -209,16 +249,21 @@ func main() {
 	}
 	defer l.Close()
 
-	reader := getReader()
 	exit := make(chan error)
 	defer close(exit)
 
+	readCloser, err := getReader()
+	if err != nil {
+		exitError(err)
+	}
+	defer readCloser.Close()
+
 	if *scriptFlag != "" {
-		go runPipeline(l, exit, reader)
+		go runPipeline(l, exit, readCloser)
 	} else if *benchFlag != "" {
-		go runLuaBench(l, exit, reader)
+		go runLuaBench(l, exit, readCloser)
 	} else {
-		go runFullBench(l, exit, reader)
+		go runFullBench(l, exit, readCloser)
 	}
 
 	signals := make(chan os.Signal)
@@ -227,13 +272,13 @@ func main() {
 	go sigHandler(l, script, exit, signals)
 	signal.Notify(signals, syscall.SIGUSR1, syscall.SIGUSR2)
 
-	if *debugFlag {
+	if *profServer {
 		go runPprofServer(exit)
 	}
 
 	err = <-exit
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s", err)
+		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
 }
