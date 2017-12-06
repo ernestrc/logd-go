@@ -3,13 +3,14 @@ package logging
 type state uint8
 
 const (
-	// TODO should ignore any rune that is ^(1-9|:|,|.)
 	dateState state = iota
 	timeState
 	transitionLevelState
 	levelState
 	transitionThreadState
 	threadState
+	threadBracketState   // if next == '['
+	threadNoBracketState // else
 	transitionClassState
 	classState
 	transitionCallTypeState
@@ -124,9 +125,27 @@ func (p *Parser) handleTransition(r rune) bool {
 	return false
 }
 
+func (p *Parser) handleNextDate(prop *string, r rune) {
+	switch r {
+	case '[':
+		p.start++
+		p.end++
+	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ',', '.', '-':
+		p.end++
+	default:
+		*prop = p.raw[p.start:p.end]
+		p.end++
+		p.start = p.end
+		p.state++
+	}
+}
+
 func (p *Parser) handleNextHeader(prop *string, r rune) {
 	switch r {
-	case '\t', ' ':
+	case '[':
+		p.start++
+		p.end++
+	case '\t', ' ', ']':
 		*prop = p.raw[p.start:p.end]
 		p.end++
 		p.start = p.end
@@ -136,16 +155,27 @@ func (p *Parser) handleNextHeader(prop *string, r rune) {
 	}
 }
 
-func (p *Parser) handleNextThread(log *Log, r rune) {
+func (p *Parser) handleNextThreadBracket(log *Log, r rune) {
 	switch r {
-	case ']':
-		p.start++
+	case ']', '\t':
 		log.Thread = p.raw[p.start:p.end]
 		p.end++
 		p.start = p.end
-		p.state++
+		p.state = transitionClassState
 	default:
 		p.end++
+	}
+}
+
+func (p *Parser) handleNextThread(log *Log, r rune) {
+	switch r {
+	case '[':
+		p.state = threadBracketState
+		p.start++
+		p.end++
+	default:
+		p.state = threadNoBracketState
+		p.handleNextHeader(&log.Thread, r)
 	}
 }
 
@@ -176,13 +206,17 @@ func (p *Parser) verifyCallType(log *Log, r rune) {
 func (p *Parser) next(log *Log, r rune) {
 	switch p.state {
 	case dateState:
-		p.handleNextHeader(&log.date, r)
+		p.handleNextDate(&log.date, r)
 	case timeState:
-		p.handleNextHeader(&log.time, r)
+		p.handleNextDate(&log.time, r)
 	case levelState:
 		p.handleNextHeader(&log.Level, r)
 	case threadState:
 		p.handleNextThread(log, r)
+	case threadBracketState:
+		p.handleNextThreadBracket(log, r)
+	case threadNoBracketState:
+		p.handleNextHeader(&log.Thread, r)
 	case classState:
 		p.handleNextHeader(&log.Class, r)
 	case callTypeState:
