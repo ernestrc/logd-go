@@ -34,10 +34,8 @@ func (d *dirFlagType) Set(v string) error {
 	return nil
 }
 
-// TODO check that bench is not being called with -d flag
-var scriptFlag = flag.String("R", "", "Run Lua script processing pipeline")
-var benchFlag = flag.String("B", "", "Benchmark Lua script processing pipeline")
-var fullBenchFlag = flag.String("F", "", "Benchmark full processing pipeline (log parsing + lua processing)")
+var benchFlag = flag.Bool("B", false, "Benchmark lua script")
+var fullBenchFlag = flag.Bool("F", false, "Benchmark processing pipeline (log parsing + lua processing)")
 var fileFlag = flag.String("f", "/dev/stdin", "File to read data from")
 var cpuProfileFlag = flag.String("p", "", "write cpu profile to file")
 var memProfileFlag = flag.String("m", "", "write mem profile to file on SIGUSR2")
@@ -64,25 +62,13 @@ func printOptions(f *flag.Flag) {
 	if strings.Contains(f.Name, "test") {
 		return
 	}
-	if f.Name == "F" || f.Name == "B" || f.Name == "R" {
-		return
-	}
-	printFlag(f)
-}
-
-func printCommands(f *flag.Flag) {
-	if f.Name != "F" && f.Name != "B" && f.Name != "R" {
-		return
-	}
 	printFlag(f)
 }
 
 func init() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage:\n\n")
-		fmt.Fprintf(os.Stderr, "\t%s (-S|-R|-B) <lua> [options]\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "\nCommands:\n\n")
-		flag.VisitAll(printCommands)
+		fmt.Fprintf(os.Stderr, "\t%s <script> [options]\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\nOptions:\n\n")
 		flag.VisitAll(printOptions)
 	}
@@ -119,35 +105,23 @@ func runPipeline(l *lua.Sandbox, exit chan<- error, reader io.Reader) {
 	}
 }
 
-func usageError(err error) {
-	fmt.Fprintf(os.Stderr, "error: %s\n\n", err)
-	flag.Usage()
-	os.Exit(1)
-}
-
 func exitError(err error) {
 	fmt.Fprintf(os.Stderr, "error: %s\n\n", err)
 	os.Exit(1)
 }
 
-func validateFlags() string {
-	if *scriptFlag == "" && *benchFlag == "" && *fullBenchFlag == "" {
-		usageError(fmt.Errorf("no lua script provided"))
+func validateFlags() {
+	args := flag.Args()
+	if len(args) == 0 {
+		exitError(fmt.Errorf("no lua script provided"))
 	}
-	if (*scriptFlag != "" && *benchFlag != "") ||
-		(*fullBenchFlag != "" && *benchFlag != "") ||
-		(*fullBenchFlag != "" && *scriptFlag != "") {
-		usageError(fmt.Errorf("only one mode is allowed"))
-	}
-	if *scriptFlag != "" {
-		return *scriptFlag
+	if *fullBenchFlag && *benchFlag {
+		exitError(fmt.Errorf("only one bench mode is allowed"))
 	}
 
-	if *fullBenchFlag != "" {
-		return *fullBenchFlag
+	if len(dirFlag) != 0 && (*fullBenchFlag || *benchFlag) {
+		exitError(fmt.Errorf("-d not allowd with bench mode"))
 	}
-
-	return *benchFlag
 }
 
 type bufioReadCloser struct {
@@ -234,7 +208,8 @@ func main() {
 
 	flag.Var(&dirFlag, "d", "Monitor directory recursively, ingesting all the new data written to files. Overrides -f flag")
 	flag.Parse()
-	script := validateFlags()
+	validateFlags()
+	script := flag.Args()[0]
 
 	if f := cpuProfile(); f != nil {
 		if err = pprof.StartCPUProfile(f); err != nil {
@@ -252,18 +227,18 @@ func main() {
 	exit := make(chan error)
 	defer close(exit)
 
-	readCloser, err := getReader()
+	readeCloser, err := getReader()
 	if err != nil {
 		exitError(err)
 	}
-	defer readCloser.Close()
+	defer readeCloser.Close()
 
-	if *scriptFlag != "" {
-		go runPipeline(l, exit, readCloser)
-	} else if *benchFlag != "" {
-		go runLuaBench(l, exit, readCloser)
+	if *fullBenchFlag {
+		go runFullBench(l, exit, readeCloser)
+	} else if *benchFlag {
+		go runLuaBench(l, exit, readeCloser)
 	} else {
-		go runFullBench(l, exit, readCloser)
+		go runPipeline(l, exit, readeCloser)
 	}
 
 	signals := make(chan os.Signal)
