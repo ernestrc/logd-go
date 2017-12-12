@@ -12,6 +12,7 @@ const log2 = "2017-09-07 14:54:39,474	DEBUG	[pool-5-thread-6]	control.RaptorHand
 const log3 = "2017-04-19 18:01:11,437     INFO [Test worker]    core.InstrumentationListener	i do not want to log anything special here\n"
 const log4 = "2017-04-19 18:01:11,437     INFO [Test worker]    core.InstrumentationListener	only: one\n"
 const log5 = "2017-11-16 19:07:56,883	WARN	[-]	-	flow: UpdateClientActivity, operation: HandleActiveEvent, step: Failure, luaRocks: true\n"
+const log6 = "[2017-12-05T15:09:09.858] [WARN] main - flow: , operation: closePage, step: Failure, logLevel: WARN, url: https://10.1.6.113:6060/index.html?id=5NZM0okZ&wsUri=wss%3A%2F%2F10.1.6.113%3A6060%2Fws%3Fid%3D5NZM0okZ, err: Error  Protocol error (Target.closeTarget)  Target closed.     at Connection._onClose (/home/ernestrc/src/tbsip/node_modules/puppeteer/lib/Connection.js 124 23)     at emitTwo (events.js 125 13)     at WebSocket.emit (events.js 213 7)     at WebSocket.emitClose (/home/ernestrc/src/tbsip/node_modules/ws/lib/WebSocket.js 213 10)     at _receiver.cleanup (/home/ernestrc/src/tbsip/node_modules/ws/lib/WebSocket.js 195 41)     at Receiver.cleanup (/home/ernestrc/src/tbsip/node_modules/ws/lib/Receiver.js 520 15)     at WebSocket.finalize (/home/ernestrc/src/tbsip/node_modules/ws/lib/WebSocket.js 195 22)     at emitNone (events.js 110 20)     at Socket.emit (events.js 207 7)     at endReadableNT (_stream_readable.js 1047 12), class: Endpoint, id: 5NZM0okZ, timestamp: 1512515349858, duration: 2.017655998468399\n"
 
 var expected1 = Log{
 	time:    "14:54:39,474",
@@ -87,21 +88,41 @@ var expected5 = Log{
 	},
 }
 
+var expected6 = Log{
+	time:   "15:09:09.858",
+	date:   "2017-12-05",
+	Level:  Warn,
+	Thread: "main",
+	Class:  "-",
+	props: []Property{
+		{"flow", ""},
+		{"operation", "closePage"},
+		{"step", "Failure"},
+		{"logLevel", "WARN"},
+		{"url", "https://10.1.6.113:6060/index.html?id=5NZM0okZ&wsUri=wss%3A%2F%2F10.1.6.113%3A6060%2Fws%3Fid%3D5NZM0okZ"},
+		{"err", "Error  Protocol error (Target.closeTarget)  Target closed.     at Connection._onClose (/home/ernestrc/src/tbsip/node_modules/puppeteer/lib/Connection.js 124 23)     at emitTwo (events.js 125 13)     at WebSocket.emit (events.js 213 7)     at WebSocket.emitClose (/home/ernestrc/src/tbsip/node_modules/ws/lib/WebSocket.js 213 10)     at _receiver.cleanup (/home/ernestrc/src/tbsip/node_modules/ws/lib/WebSocket.js 195 41)     at Receiver.cleanup (/home/ernestrc/src/tbsip/node_modules/ws/lib/Receiver.js 520 15)     at WebSocket.finalize (/home/ernestrc/src/tbsip/node_modules/ws/lib/WebSocket.js 195 22)     at emitNone (events.js 110 20)     at Socket.emit (events.js 207 7)     at endReadableNT (_stream_readable.js 1047 12)"},
+		{"class", "Endpoint"},
+		{"id", "5NZM0okZ"},
+		{"timestamp", "1512515349858"},
+		{"duration", "2.017655998468399"},
+	},
+}
+
 func testEquals(t *testing.T, output Log, expected Log) {
 	if expected.Timestamp() != output.Timestamp() {
-		t.Errorf("expected Time %s found %s", expected.Timestamp(), output.Timestamp())
+		t.Errorf("expected Time '%s' found '%s'", expected.Timestamp(), output.Timestamp())
 	}
 	if expected.Level != output.Level {
-		t.Errorf("expected Level %s found %s", expected.Level, output.Level)
+		t.Errorf("expected Level '%s' found '%s'", expected.Level, output.Level)
 	}
 	if expected.Thread != output.Thread {
-		t.Errorf("expected Thread %s found %s", expected.Thread, output.Thread)
+		t.Errorf("expected Thread '%s' found '%s'", expected.Thread, output.Thread)
 	}
 	if expected.Class != output.Class {
-		t.Errorf("expected Class %s found %s", expected.Class, output.Class)
+		t.Errorf("expected Class '%s' found '%s'", expected.Class, output.Class)
 	}
 	if expected.Message != output.Message {
-		t.Errorf("expected Message %s found %s", expected.Message, output.Message)
+		t.Errorf("expected Message '%s' found '%s'", expected.Message, output.Message)
 	}
 
 	if len(expected.props) != len(output.props) {
@@ -118,7 +139,7 @@ func testEquals(t *testing.T, output Log, expected Log) {
 			if len(output.props) > i {
 				out = output.props[i].value
 			}
-			t.Errorf("expected %s %s found %s", k, v, out)
+			t.Errorf("expected '%s' to be '%s'; found '%s'", k, v, out)
 		}
 		seen[k] = struct{}{}
 	}
@@ -144,6 +165,11 @@ func TestParserProps2(t *testing.T) {
 func TestParserProps5(t *testing.T) {
 	logs := Parse(log5)
 	testEquals(t, logs[0], expected5)
+}
+
+func TestParserProps6(t *testing.T) {
+	logs := Parse(log6)
+	testEquals(t, logs[0], expected6)
 }
 
 func TestParserNothing(t *testing.T) {
