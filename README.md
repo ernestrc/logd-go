@@ -5,7 +5,7 @@ Logd is an open source data collector with an embedded Lua VM. The collector tak
 | Builtin | Description |
 | --- | --- |
 | `function config_set (key, value)` | Set a global configuration property. Check the examples and the Go documentation for more information. Keys that start with `kafka.` will be passed to librdkafka to configure the Kafka producer. Check https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md for more info |
-| `function http_get (url) body, err` | Perform a blocking HTTP Get request to `url` and return the `body` of the response and/or non-nil `err` if there was an error |
+| `function http_get (url, [headers]) body, err` | Perform a blocking HTTP Get request to `url` and return the `body` of the response and/or non-nil `err` if there was an error |
 | `function http_post  (url, payload, contentType)` | Perform an HTTP Post request to the given URL with the given `payload` and `Content-Type` header set to `contentType`. Method call is non-blocking unless client is performing back-pressure. Back-pressure can be tuned by changing the http client configuration. Errors will be delivered on the provided `on_http_error` callback if specified |
 | `function kafka_offset (key, value)` | Create a new named kafka offset |
 | `function kafka_message (key, value, topic, partition, offsetptr) msgptr` | Create a new kafka message and return a pointer to it. `partition` can be set to -1 to use any partition. `offsetptr` can be null |

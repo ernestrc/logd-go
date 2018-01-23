@@ -11,13 +11,31 @@ import (
 
 // luaHTTPGet will make an HTTP request to the given url synchronously and return
 // the body of the response and an error if there is one.
-// lua signature is function http_get(url) body, err
+// lua signature is function http_get(url, [headers]) body, err
 func luaHTTPGet(l *lua.State) int {
 	var b []byte
-	url := getArgString(l, 1, luaNameHTTPGetFn)
-	res, err := stdHttp.Get(url)
+	var res *stdHttp.Response
+	var req *stdHttp.Request
+	var err error
 
+	url := getArgString(l, 1, luaNameHTTPGetFn)
+	req, err = stdHttp.NewRequest("GET", url, nil)
 	if err != nil {
+		goto errh
+	}
+
+	// optionally push headers
+	if l.ToValue(2) != nil {
+		l.PushNil()
+		for l.Next(2) {
+			k := lua.CheckString(l, -2)
+			v := lua.CheckString(l, -1)
+			req.Header.Add(k, v)
+			l.Pop(1)
+		}
+	}
+
+	if res, err = stdHttp.DefaultClient.Do(req); err != nil {
 		goto errh
 	}
 
