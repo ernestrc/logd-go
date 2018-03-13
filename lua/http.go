@@ -100,9 +100,13 @@ func (l *Sandbox) setHTTPConcurrency(c int) {
 func (l *Sandbox) callOnHTTPError(e http.Error) {
 	l.luaLock.Lock()
 	defer l.luaLock.Unlock()
-	l.state.Global(luaNameOnHTTPErrorFn)
+
+	l.state.Global(luaNameLogdModule)
+	defer l.state.Pop(1)
+
+	l.state.Field(-1, luaNameOnHTTPErrorFn)
 	if !l.state.IsFunction(-1) {
-		l.state.Pop(-1)
+		l.state.Pop(1)
 		return
 	}
 

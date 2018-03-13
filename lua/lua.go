@@ -14,6 +14,7 @@ import (
 const (
 	/* internal */
 	luaNameSandboxContext = "lsb_context"
+	luaNameLogdModule     = "logd"
 
 	/* lua functions provided by client script */
 	luaNameOnLogFn         = "on_log"
@@ -54,42 +55,41 @@ func (l *Sandbox) setTick(tick int) {
 	}
 }
 
+var logdAPI = []lua.RegistryFunction{
+	/* module API */
+	{Name: luaNameHTTPGetFn, Function: luaHTTPGet},
+	{Name: luaNameHTTPPostFn, Function: luaHTTPPost},
+	{Name: luaNameConfigFn, Function: luaSetConfig},
+	{Name: luaNameGetFn, Function: luaGetLogProperty},
+	{Name: luaNameSetFn, Function: luaSetLogProperty},
+	{Name: luaNameRemoveFn, Function: luaRemoveLogProperty},
+	{Name: luaNameResetFn, Function: luaResetLog},
+	{Name: luaNameLogStringFn, Function: luaLogString},
+	{Name: luaNameLogJSONFn, Function: luaLogJSON},
+	{Name: luaNameKafkaOffsetFn, Function: luaKafkaOffset},
+	{Name: luaNameKafkaMessageFn, Function: luaKafkaMessage},
+	{Name: luaNameKafkaProduceFn, Function: luaKafkaProduce},
+	/* hooks */
+	{Name: luaNameOnLogFn, Function: nil},
+	{Name: luaNameOnTickFn, Function: nil},
+	{Name: luaNameOnHTTPErrorFn, Function: nil},
+	{Name: luaNameOnKafkaReportFn, Function: nil},
+}
+
+// opens the logd library
+func logdOpen(l *lua.State) int {
+	lua.NewLibrary(l, logdAPI)
+	return 1
+}
+
 func (l *Sandbox) loadUtils() {
-	l.state.PushGoFunction(luaHTTPGet)
-	l.state.SetGlobal(luaNameHTTPGetFn)
+	lua.Require(l.state, luaNameLogdModule, logdOpen, true)
+	l.state.Pop(1)
 
-	l.state.PushGoFunction(luaHTTPPost)
-	l.state.SetGlobal(luaNameHTTPPostFn)
-
-	l.state.PushGoFunction(luaSetConfig)
-	l.state.SetGlobal(luaNameConfigFn)
-
-	l.state.PushGoFunction(luaGetLogProperty)
-	l.state.SetGlobal(luaNameGetFn)
-
-	l.state.PushGoFunction(luaSetLogProperty)
-	l.state.SetGlobal(luaNameSetFn)
-
-	l.state.PushGoFunction(luaRemoveLogProperty)
-	l.state.SetGlobal(luaNameRemoveFn)
-
-	l.state.PushGoFunction(luaResetLog)
-	l.state.SetGlobal(luaNameResetFn)
-
-	l.state.PushGoFunction(luaLogString)
-	l.state.SetGlobal(luaNameLogStringFn)
-
-	l.state.PushGoFunction(luaLogJSON)
-	l.state.SetGlobal(luaNameLogJSONFn)
-
-	l.state.PushGoFunction(luaKafkaOffset)
-	l.state.SetGlobal(luaNameKafkaOffsetFn)
-
-	l.state.PushGoFunction(luaKafkaMessage)
-	l.state.SetGlobal(luaNameKafkaMessageFn)
-
-	l.state.PushGoFunction(luaKafkaProduce)
-	l.state.SetGlobal(luaNameKafkaProduceFn)
+	lua.SubTable(l.state, lua.RegistryIndex, "_PRELOAD")
+	l.state.PushGoFunction(logdOpen)
+	l.state.SetField(-2, luaNameLogdModule)
+	l.state.Pop(1)
 
 	l.state.PushUserData(l)
 	l.state.SetGlobal(luaNameSandboxContext)
@@ -103,16 +103,21 @@ func (l *Sandbox) loadScript() error {
 	return nil
 }
 
-func (l *Sandbox) callOnTick() bool {
+func (l *Sandbox) callOnTick() (ok bool) {
 	l.luaLock.Lock()
 	defer l.luaLock.Unlock()
-	l.state.Global(luaNameOnTickFn)
-	if l.state.IsFunction(-1) {
-		l.state.Call(0, 0)
-		return true
+
+	l.state.Global(luaNameLogdModule)
+	defer l.state.Pop(1)
+
+	l.state.Field(-1, luaNameOnTickFn)
+	ok = l.state.IsFunction(-1)
+	if !ok {
+		l.state.Pop(1)
+		return
 	}
-	l.state.Pop(-1)
-	return false
+	l.state.Call(0, 0)
+	return
 }
 
 func (l *Sandbox) runTicker() {
@@ -146,8 +151,13 @@ func NewSandbox(scriptPath string, cfg *Config) (l *Sandbox, err error) {
 func (l *Sandbox) CallOnLog(lg *logging.Log) error {
 	l.luaLock.Lock()
 	defer l.luaLock.Unlock()
-	l.state.Global(luaNameOnLogFn)
+
+	l.state.Global(luaNameLogdModule)
+	defer l.state.Pop(1)
+
+	l.state.Field(-1, luaNameOnLogFn)
 	if !l.state.IsFunction(-1) {
+		l.state.Pop(1)
 		return fmt.Errorf("not defined in lua script: function on_log (logptr)")
 	}
 	l.state.PushUserData(lg)

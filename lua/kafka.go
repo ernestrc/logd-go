@@ -155,9 +155,13 @@ func (l *Sandbox) setKafkaConfig(key string, value interface{}) bool {
 func (l *Sandbox) callOnKafkaReport(m *kafka.Message) {
 	l.luaLock.Lock()
 	defer l.luaLock.Unlock()
-	l.state.Global(luaNameOnKafkaReportFn)
+
+	l.state.Global(luaNameLogdModule)
+	defer l.state.Pop(1)
+
+	l.state.Field(-1, luaNameOnKafkaReportFn)
 	if !l.state.IsFunction(-1) {
-		l.state.Pop(-1)
+		l.state.Pop(1)
 		return
 	}
 
