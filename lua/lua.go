@@ -69,11 +69,12 @@ var logdAPI = []lua.RegistryFunction{
 	{Name: luaNameKafkaOffsetFn, Function: luaKafkaOffset},
 	{Name: luaNameKafkaMessageFn, Function: luaKafkaMessage},
 	{Name: luaNameKafkaProduceFn, Function: luaKafkaProduce},
-	/* hooks */
+	/* hooks are left undefined
 	{Name: luaNameOnLogFn, Function: nil},
 	{Name: luaNameOnTickFn, Function: nil},
 	{Name: luaNameOnHTTPErrorFn, Function: nil},
 	{Name: luaNameOnKafkaReportFn, Function: nil},
+	*/
 }
 
 // opens the logd library
