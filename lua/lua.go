@@ -2,6 +2,8 @@ package lua
 
 import (
 	"fmt"
+	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -78,17 +80,26 @@ var logdAPI = []lua.RegistryFunction{
 }
 
 // opens the logd library
-func logdOpen(l *lua.State) int {
+func luaLogdOpen(l *lua.State) int {
 	lua.NewLibrary(l, logdAPI)
 	return 1
 }
 
-func (l *Sandbox) loadUtils() {
-	lua.Require(l.state, luaNameLogdModule, logdOpen, true)
+func (l *Sandbox) addPackagePath(path string) {
+	l.state.Global("package")
+	l.state.Field(-1, "path")
+	l.state.PushString(fmt.Sprintf(";%s", path))
+	l.state.Concat(2)
+	l.state.SetField(-2, "path")
+	l.state.Pop(1)
+}
+
+func (l *Sandbox) openLogdLibrary() {
+	lua.Require(l.state, luaNameLogdModule, luaLogdOpen, true)
 	l.state.Pop(1)
 
 	lua.SubTable(l.state, lua.RegistryIndex, "_PRELOAD")
-	l.state.PushGoFunction(logdOpen)
+	l.state.PushGoFunction(luaLogdOpen)
 	l.state.SetField(-2, luaNameLogdModule)
 	l.state.Pop(1)
 
@@ -96,7 +107,7 @@ func (l *Sandbox) loadUtils() {
 	l.state.SetGlobal(luaNameSandboxContext)
 }
 
-func (l *Sandbox) loadScript() error {
+func (l *Sandbox) loadUserScript() error {
 	if err := lua.DoFile(l.state, l.scriptPath); err != nil {
 		return fmt.Errorf("there was an error when loading script: %s", err)
 	}
@@ -205,10 +216,20 @@ func (l *Sandbox) Init(scriptPath string, cfg *Config) (err error) {
 	setSaneKafkaDefaults(l.kafkaConfig)
 
 	lua.OpenLibraries(l.state)
-	l.loadUtils()
-	if err = l.loadScript(); err != nil {
+	l.openLogdLibrary()
+
+	/* enable script to require modules that are relative path-wise */
+	var cwd string
+	if cwd, err = os.Getwd(); err != nil {
 		return
 	}
+	scriptDir := path.Join(cwd, path.Dir(scriptPath))
+	l.addPackagePath(path.Join(scriptDir, "?.lua"))
+
+	if err = l.loadUserScript(); err != nil {
+		return
+	}
+
 	if l.cfg.tick > 0 {
 		l.quitticker = make(chan struct{})
 		go l.runTicker()
