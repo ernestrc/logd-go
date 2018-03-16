@@ -29,7 +29,6 @@ const (
 // to perform I/O operations and transformations over logging.Log structures.
 type Sandbox struct {
 	luaLock     sync.Mutex
-	tickerLock  sync.Mutex
 	scriptPath  string
 	cfg         *Config
 	state       *lua.State
@@ -41,20 +40,26 @@ type Sandbox struct {
 	httpErrors  chan http.Error
 }
 
+func (l *Sandbox) stopTicker() {
+	if l.quitticker == nil {
+		return
+	}
+	l.quitticker <- struct{}{}
+	close(l.quitticker)
+	l.quitticker = nil // indicating that ticker is not running
+}
+
+func (l *Sandbox) restartTicker() {
+	l.stopTicker()
+	l.runTicker()
+}
+
 func (l *Sandbox) setTick(tick int) {
 	l.cfg.tick = tick
-	// stop/start ticker if running
-	if l.quitticker != nil {
-		// in case setTick was called from ticker goroutine via on_tick lua function
-		// global ticker log will prevent subsequent runTicker from starting
-		// before the previous one has finished running
-		go func(s *Sandbox) {
-			s.quitticker <- struct{}{}
-		}(l)
-		if l.cfg.tick > 0 {
-			go l.runTicker()
-		}
-	}
+	// stop/start ticker if running. In case setTick was called
+	// from on_tick hook, run stop/start in a separate goroutine
+	// so we don't deadlock
+	go l.restartTicker()
 }
 
 var logdAPI = []lua.RegistryFunction{
@@ -132,9 +137,7 @@ func (l *Sandbox) callOnTick() (ok bool) {
 	return
 }
 
-func (l *Sandbox) runTicker() {
-	l.tickerLock.Lock()
-	defer l.tickerLock.Unlock()
+func (l *Sandbox) tick() {
 	ticker := time.NewTicker(time.Duration(l.cfg.tick * 1000 * 1000))
 	defer ticker.Stop()
 	for {
@@ -149,6 +152,11 @@ func (l *Sandbox) runTicker() {
 			return
 		}
 	}
+}
+
+func (l *Sandbox) runTicker() {
+	l.quitticker = make(chan struct{})
+	go l.tick()
 }
 
 // NewSandbox allocates storage and initializes a new Sandbox
@@ -230,10 +238,7 @@ func (l *Sandbox) Init(scriptPath string, cfg *Config) (err error) {
 		return
 	}
 
-	if l.cfg.tick > 0 {
-		l.quitticker = make(chan struct{})
-		go l.runTicker()
-	}
+	l.restartTicker()
 	return nil
 }
 
@@ -256,11 +261,9 @@ func (l *Sandbox) Close() {
 	}
 	l.luaLock.Lock()
 	defer l.luaLock.Unlock()
-	if l.quitticker != nil {
-		l.quitticker <- struct{}{}
-		close(l.quitticker)
-		l.quitticker = nil
-	}
+
+	l.stopTicker()
+
 	if l.http != nil {
 		l.http.Close()
 		close(l.httpErrors)
