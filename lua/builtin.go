@@ -7,11 +7,6 @@ import (
 	"github.com/ernestrc/logd/logging"
 )
 
-// TODO add elastic_post function
-// TODO add graphite_post function
-// TODO add netdata_post function
-// TODO add s3_post function
-
 const (
 	luaNameConfigFn       = "config_set"
 	luaNameHTTPGetFn      = "http_get"
@@ -106,7 +101,7 @@ func luaGetLogProperty(l *lua.State) (i int) {
 	var ok bool
 	value, ok = log.Get(key)
 	if !ok {
-		l.PushNil()
+		l.PushString("")
 		return 1
 	}
 	l.PushString(value)
