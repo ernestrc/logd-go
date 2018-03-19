@@ -231,7 +231,10 @@ func (l *Sandbox) Init(scriptPath string, cfg *Config) (err error) {
 	if cwd, err = os.Getwd(); err != nil {
 		return
 	}
-	scriptDir := path.Join(cwd, path.Dir(scriptPath))
+	scriptDir := path.Dir(scriptPath)
+	if !path.IsAbs(scriptPath) {
+		scriptDir = path.Join(cwd, scriptDir)
+	}
 	l.addPackagePath(path.Join(scriptDir, "?.lua"))
 
 	if err = l.loadUserScript(); err != nil {
