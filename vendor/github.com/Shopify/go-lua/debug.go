@@ -11,7 +11,11 @@ type Frame *callInfo
 
 func (l *State) resetHookCount() { l.hookCount = l.baseHookCount }
 func (l *State) prototype(ci *callInfo) *prototype {
-	return l.stack[ci.function].(*luaClosure).prototype
+	c, ok := l.stack[ci.function].(*luaClosure)
+	if !ok {
+		return nil
+	}
+	return c.prototype
 }
 func (l *State) currentLine(ci *callInfo) int {
 	return int(l.prototype(ci).lineInfo[ci.savedPC])
@@ -228,6 +232,9 @@ func functionInfo(p Debug, f closure) (d Debug) {
 func (l *State) functionName(ci *callInfo) (name, kind string) {
 	var tm tm
 	p := l.prototype(ci)
+	if p == nil {
+		return "<unknown>", "<unknown>"
+	}
 	pc := ci.savedPC
 	switch i := p.code[pc]; i.opCode() {
 	case opCall, opTailCall:
