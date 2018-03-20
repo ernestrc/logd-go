@@ -282,6 +282,8 @@ func (l *Sandbox) Init(scriptPath string) (err error) {
 	if l.state != nil {
 		l.Close()
 	}
+	l.luaLock.Lock()
+	defer l.luaLock.Unlock()
 	l.state = lua.NewState()
 	l.scriptPath = scriptPath
 
@@ -345,6 +347,7 @@ func (l *Sandbox) Close() {
 	if l.kafka != nil {
 		l.flushKafka()
 		l.kafka.Close()
+		l.kafka = nil
 	}
 	l.luaLock.Lock()
 	defer l.luaLock.Unlock()
@@ -354,6 +357,8 @@ func (l *Sandbox) Close() {
 	if l.http != nil {
 		l.http.Close()
 		close(l.httpErrors)
+		l.httpErrors = nil
+		l.http = nil
 	}
 
 	// marks sandbox as uninitialized
