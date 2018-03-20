@@ -121,34 +121,20 @@ func (l *Sandbox) loadUserScript() error {
 	return nil
 }
 
-// TODO protected mode
-func (l *Sandbox) callOnTick() (ok bool) {
-	l.luaLock.Lock()
-	defer l.luaLock.Unlock()
-
-	l.state.Global(luaNameLogdModule)
-	defer l.state.Pop(1)
-
-	l.state.Field(-1, luaNameOnTickFn)
-	ok = l.state.IsFunction(-1)
-	if !ok {
-		l.state.Pop(1)
-		return
-	}
-	l.state.Call(0, 0)
-	return
-}
-
 func (l *Sandbox) tick() {
 	ticker := time.NewTicker(time.Duration(l.cfg.tick * 1000 * 1000))
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			defined := l.callOnTick()
-			// stop goroutine if on_tick is not defined
-			if !defined {
-				panic("ticker goroutine error: called ticker but `on_tick` is not defined")
+			var fn func() error
+			if l.cfg.protected {
+				fn = l.callProtectedOnTick
+			} else {
+				fn = l.callOnTick
+			}
+			if err := fn(); err != nil {
+				panic(err)
 			}
 		case <-l.quitticker:
 			return
@@ -168,19 +154,17 @@ func NewSandbox(scriptPath string) (l *Sandbox, err error) {
 	return
 }
 
-func (l *Sandbox) callOnError(lg *logging.Log, err error) {
+// caller must take care of synchronizing concurrent access to state
+// and it's responsible for popping the logd module from the stack
+func (l *Sandbox) pushOnTick() (err error) {
 	l.state.Global(luaNameLogdModule)
-	defer l.state.Pop(1)
-
-	l.state.Field(-1, luaNameOnErrorFn)
-	if !l.state.IsFunction(-1) {
+	l.state.Field(-1, luaNameOnTickFn)
+	if ok := l.state.IsFunction(-1); !ok {
 		l.state.Pop(1)
-		panic(fmt.Errorf("runtime error thrown but not defined in lua script: function %s.%s(logptr, error): %s",
-			luaNameLogdModule, luaNameOnErrorFn, err))
+		err = fmt.Errorf("not defined in lua script: function logd.on_tick()")
+		return
 	}
-	l.state.PushUserData(lg)
-	l.state.PushString(err.Error())
-	l.state.Call(2, 0)
+	return
 }
 
 // caller must take care of synchronizing concurrent access to state
@@ -196,6 +180,68 @@ func (l *Sandbox) pushOnLog(lg *logging.Log) (err error) {
 	l.state.PushUserData(lg)
 
 	return
+}
+
+// note that caller is responsible for pushing the system error handler in the stack at index 1
+func (l *Sandbox) callProtected(lg *logging.Log, args, ret int, fnName string) error {
+	const errHandlerIdx = 1
+	if !l.state.IsFunction(errHandlerIdx) {
+		panic(fmt.Errorf("could not find system error handler at index %d", errHandlerIdx))
+	}
+
+	// if error is handled by hook, we do not need to return it
+	if runtimeErr := l.state.ProtectedCall(args, ret, errHandlerIdx); runtimeErr != nil {
+		if _, ok := runtimeErr.(lua.RuntimeError); !ok {
+			return runtimeErr
+		}
+		l.callOnError(lg, fmt.Errorf("%s : %s", fnName, runtimeErr))
+	}
+
+	return nil
+}
+
+func (l *Sandbox) callOnTick() (err error) {
+	l.luaLock.Lock()
+	defer l.luaLock.Unlock()
+
+	err = l.pushOnTick()
+	defer l.state.Pop(1)
+	if err != nil {
+		return
+	}
+
+	l.state.Call(0, 0)
+	return
+}
+
+func (l *Sandbox) callProtectedOnTick() (err error) {
+	l.luaLock.Lock()
+	defer l.luaLock.Unlock()
+
+	l.state.PushGoFunction(luaGoErrorHandler)
+	err = l.pushOnTick()
+	defer l.state.Pop(1)
+	if err != nil {
+		return
+	}
+
+	l.callProtected(&logging.Log{}, 0, 0, luaNameOnTickFn)
+	return
+}
+
+func (l *Sandbox) callOnError(lg *logging.Log, err error) {
+	l.state.Global(luaNameLogdModule)
+	defer l.state.Pop(1)
+
+	l.state.Field(-1, luaNameOnErrorFn)
+	if !l.state.IsFunction(-1) {
+		l.state.Pop(1)
+		panic(fmt.Errorf("runtime error thrown but not defined in lua script: function %s.%s(logptr, error): %s",
+			luaNameLogdModule, luaNameOnErrorFn, err))
+	}
+	l.state.PushUserData(lg)
+	l.state.PushString(err.Error())
+	l.state.Call(2, 0)
 }
 
 // CallOnLog will call this lua sandbox's on_log function with the given log pointer
@@ -228,18 +274,7 @@ func (l *Sandbox) ProtectedCallOnLog(lg *logging.Log) (err error) {
 		return
 	}
 
-	const errHandlerIdx = 1
-	if !l.state.IsFunction(errHandlerIdx) {
-		panic(fmt.Errorf("could not find system error handler at index %d", errHandlerIdx))
-	}
-
-	// if error is handled by hook, we do not need to return it
-	if runtimeErr := l.state.ProtectedCall(1, 0, errHandlerIdx); runtimeErr != nil {
-		if _, ok := runtimeErr.(lua.RuntimeError); !ok {
-			return runtimeErr
-		}
-		l.callOnError(lg, runtimeErr)
-	}
+	l.callProtected(lg, 1, 0, luaNameOnLogFn)
 
 	return
 }
