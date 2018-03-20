@@ -95,21 +95,37 @@ func runPipeline(l *lua.Sandbox, exit chan<- error, reader io.Reader) {
 
 	var buf [64 * 1000 * 1000]byte
 	var err error
-	for {
-		var n int
-		if n, err = reader.Read(buf[:]); err != nil {
-			break
-		}
+	var n int
 
-		logs = p.Parse(string(buf[:n]), logs)
-
-		for _, log := range logs {
-			if err = l.CallOnLog(&log); err != nil {
+	if l.ProtectedMode() {
+	protectedCall:
+		for {
+			if n, err = reader.Read(buf[:]); err != nil {
 				break
 			}
+			logs = p.Parse(string(buf[:n]), logs)
+			for _, log := range logs {
+				if err = l.ProtectedCallOnLog(&log); err != nil {
+					break protectedCall
+				}
+			}
+			logs = logs[:0]
 		}
+	} else {
+	call:
+		for {
+			if n, err = reader.Read(buf[:]); err != nil {
+				break
+			}
 
-		logs = logs[:0]
+			logs = p.Parse(string(buf[:n]), logs)
+			for _, log := range logs {
+				if err = l.CallOnLog(&log); err != nil {
+					break call
+				}
+			}
+			logs = logs[:0]
+		}
 	}
 	if err != nil && err != io.EOF {
 		fmt.Fprint(os.Stderr, "error: ")
@@ -215,7 +231,9 @@ func sigHandler(l *lua.Sandbox, script string, exit chan error, sig chan os.Sign
 			}
 		case syscall.SIGUSR1:
 			// reload lua state
-			l.Init(script, nil)
+			if err := l.Init(script); err != nil {
+				panic(err)
+			}
 		default:
 			exit <- nil
 		}
@@ -243,7 +261,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	l, err = lua.NewSandbox(script, nil)
+	l, err = lua.NewSandbox(script)
 	if err != nil {
 		exitError(err)
 	}

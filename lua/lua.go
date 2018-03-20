@@ -20,6 +20,7 @@ const (
 
 	/* lua functions provided by client script */
 	luaNameOnLogFn         = "on_log"
+	luaNameOnErrorFn       = "on_error"
 	luaNameOnTickFn        = "on_tick"
 	luaNameOnHTTPErrorFn   = "on_http_error"
 	luaNameOnKafkaReportFn = "on_kafka_report"
@@ -30,7 +31,7 @@ const (
 type Sandbox struct {
 	luaLock     sync.Mutex
 	scriptPath  string
-	cfg         *Config
+	cfg         sandboxConfig
 	state       *lua.State
 	httpConfig  *http.Config
 	http        *http.AsyncClient
@@ -120,6 +121,7 @@ func (l *Sandbox) loadUserScript() error {
 	return nil
 }
 
+// TODO protected mode
 func (l *Sandbox) callOnTick() (ok bool) {
 	l.luaLock.Lock()
 	defer l.luaLock.Unlock()
@@ -160,29 +162,93 @@ func (l *Sandbox) runTicker() {
 }
 
 // NewSandbox allocates storage and initializes a new Sandbox
-func NewSandbox(scriptPath string, cfg *Config) (l *Sandbox, err error) {
+func NewSandbox(scriptPath string) (l *Sandbox, err error) {
 	l = new(Sandbox)
-	err = l.Init(scriptPath, cfg)
+	err = l.Init(scriptPath)
+	return
+}
+
+func (l *Sandbox) callOnError(lg *logging.Log, err error) {
+	l.state.Global(luaNameLogdModule)
+	defer l.state.Pop(1)
+
+	l.state.Field(-1, luaNameOnErrorFn)
+	if !l.state.IsFunction(-1) {
+		l.state.Pop(1)
+		panic(fmt.Errorf("runtime error thrown but not defined in lua script: function %s.%s(logptr, error): %s",
+			luaNameLogdModule, luaNameOnErrorFn, err))
+	}
+	l.state.PushUserData(lg)
+	l.state.PushString(err.Error())
+	l.state.Call(2, 0)
+}
+
+// caller must take care of synchronizing concurrent access to state
+// and it's responsible for popping the logd module from the stack
+func (l *Sandbox) pushOnLog(lg *logging.Log) (err error) {
+	l.state.Global(luaNameLogdModule)
+	l.state.Field(-1, luaNameOnLogFn)
+	if !l.state.IsFunction(-1) {
+		l.state.Pop(1)
+		err = fmt.Errorf("not defined in lua script: function logd.on_log (logptr)")
+		return
+	}
+	l.state.PushUserData(lg)
+
 	return
 }
 
 // CallOnLog will call this lua sandbox's on_log function with the given log pointer
 // or it will return an error if on_log is not defined.
-func (l *Sandbox) CallOnLog(lg *logging.Log) error {
+func (l *Sandbox) CallOnLog(lg *logging.Log) (err error) {
 	l.luaLock.Lock()
 	defer l.luaLock.Unlock()
 
-	l.state.Global(luaNameLogdModule)
+	err = l.pushOnLog(lg)
 	defer l.state.Pop(1)
-
-	l.state.Field(-1, luaNameOnLogFn)
-	if !l.state.IsFunction(-1) {
-		l.state.Pop(1)
-		return fmt.Errorf("not defined in lua script: function on_log (logptr)")
+	if err != nil {
+		return
 	}
-	l.state.PushUserData(lg)
+
 	l.state.Call(1, 0)
-	return nil
+
+	return
+}
+
+// ProtectedCallOnLog behaves like CallOnLog except that if there's a lua
+// runtime error, it will look for 'on_error' hook and call it.
+func (l *Sandbox) ProtectedCallOnLog(lg *logging.Log) (err error) {
+	l.luaLock.Lock()
+	defer l.luaLock.Unlock()
+
+	l.state.PushGoFunction(luaGoErrorHandler)
+	err = l.pushOnLog(lg)
+	defer l.state.Pop(1)
+	if err != nil {
+		return
+	}
+
+	const errHandlerIdx = 1
+	if !l.state.IsFunction(errHandlerIdx) {
+		panic(fmt.Errorf("could not find system error handler at index %d", errHandlerIdx))
+	}
+
+	// if error is handled by hook, we do not need to return it
+	if runtimeErr := l.state.ProtectedCall(1, 0, errHandlerIdx); runtimeErr != nil {
+		if _, ok := runtimeErr.(lua.RuntimeError); !ok {
+			return runtimeErr
+		}
+		l.callOnError(lg, runtimeErr)
+	}
+
+	return
+}
+
+func (l *Sandbox) errorHandlerDefined() bool {
+	l.state.Global(luaNameLogdModule)
+	l.state.Field(-1, luaNameOnErrorFn)
+	defer l.state.Pop(2)
+	return l.state.IsFunction(-1)
 }
 
 func (l *Sandbox) initHTTP() {
@@ -200,18 +266,21 @@ func (l *Sandbox) initKafka() (err error) {
 	return
 }
 
+func (l *Sandbox) setProtected(enabled bool) (err error) {
+	if enabled && !l.errorHandlerDefined() {
+		err = fmt.Errorf("protected mode set but not defined: function %s.%s (logptr, error)",
+			luaNameLogdModule, luaNameOnErrorFn)
+		return
+	}
+	l.cfg.protected = enabled
+	return
+}
+
 // Init initializes l by instantiating a fresh lua state and loading the given script
 // along with the standard lua libraries in it. If cfg is nil, a default configuration is used.
-func (l *Sandbox) Init(scriptPath string, cfg *Config) (err error) {
+func (l *Sandbox) Init(scriptPath string) (err error) {
 	if l.state != nil {
 		l.Close()
-	}
-	if cfg != nil {
-		l.cfg = cfg
-	} else {
-		l.cfg = &Config{
-			tick: 0,
-		}
 	}
 	l.state = lua.NewState()
 	l.scriptPath = scriptPath
@@ -227,12 +296,12 @@ func (l *Sandbox) Init(scriptPath string, cfg *Config) (err error) {
 	l.openLogdLibrary()
 
 	/* enable script to require modules that are relative path-wise */
-	var cwd string
-	if cwd, err = os.Getwd(); err != nil {
-		return
-	}
 	scriptDir := path.Dir(scriptPath)
 	if !path.IsAbs(scriptPath) {
+		var cwd string
+		if cwd, err = os.Getwd(); err != nil {
+			return
+		}
 		scriptDir = path.Join(cwd, scriptDir)
 	}
 	l.addPackagePath(path.Join(scriptDir, "?.lua"))
@@ -241,8 +310,23 @@ func (l *Sandbox) Init(scriptPath string, cfg *Config) (err error) {
 		return
 	}
 
+	if l.cfg.protected {
+		if err = l.setProtected(l.cfg.protected); err != nil {
+			return
+		}
+	}
+
 	l.restartTicker()
-	return nil
+	return
+}
+
+// ProtectedMode returns whether sandbox is configured to run in protected mode.
+// In this mode, when a lua runtime error is thrown by function logd.on_log,
+// function logd.on_error(logptr, error) is called.
+// This mode is toggled by calling logd.config_set("protected", true/false)
+// or by the initial sandbox configuration
+func (l *Sandbox) ProtectedMode() bool {
+	return l.cfg.protected
 }
 
 // Flush will try to flush all pending I/O operations.

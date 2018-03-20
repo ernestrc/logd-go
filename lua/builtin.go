@@ -42,6 +42,16 @@ func getArgString(l *lua.State, i int, fn string) string {
 	return arg
 }
 
+func getArgBool(l *lua.State, i int, fn string) bool {
+	arg := l.ToBoolean(i)
+	if !l.IsBoolean(i) {
+		panic(fmt.Errorf(
+			"%d argument must be a boolean in call to builtin '%s' function: found %s",
+			i, fn, l.TypeOf(i)))
+	}
+	return arg
+}
+
 func getArgInt(l *lua.State, i int, fn string) int {
 	arg, ok := l.ToInteger(i)
 	if !ok {
@@ -115,6 +125,11 @@ func luaSetConfig(l *lua.State) int {
 	sandbox := getStateSandbox(l, 3)
 
 	switch key {
+	case luaConfigProtected:
+		err := sandbox.setProtected(getArgBool(l, 2, luaNameConfigFn+"#"+luaConfigProtected))
+		if err != nil {
+			panic(err)
+		}
 	case luaConfigTick:
 		sandbox.setTick(getArgInt(l, 2, luaNameConfigFn+"#"+luaConfigTick))
 	case luaConfigHTTPConcurrency:
@@ -143,5 +158,16 @@ func luaLogString(l *lua.State) int {
 func luaLogJSON(l *lua.State) int {
 	log := getArgLogPtr(l, 1, luaNameLogStringFn)
 	l.PushString(log.JSON())
+	return 1
+}
+
+// used by runtime to provide better debugging when a lua runtime exception is thrown
+func luaGoErrorHandler(l *lua.State) int {
+	err, ok := l.ToString(-1)
+	if !ok {
+		panic(fmt.Errorf(
+			"no error in call to system error handler: found %s", l.TypeOf(-1)))
+	}
+	lua.Traceback(l, l, err, 1)
 	return 1
 }
