@@ -16,6 +16,8 @@ import (
 
 	"github.com/ernestrc/logd/logging"
 	"github.com/ernestrc/logd/lua"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const pprofServer = "localhost:6060"
@@ -34,13 +36,14 @@ func (d *dirFlagType) Set(v string) error {
 	return nil
 }
 
-// TODO check that bench is not being called with -d flag
+// TODO check that bench is not being called with -r flag
 var scriptFlag = flag.String("R", "", "Run Lua script processing pipeline")
 var benchFlag = flag.String("B", "", "Benchmark Lua script processing pipeline")
 var fullBenchFlag = flag.String("F", "", "Benchmark full processing pipeline (log parsing + lua processing)")
 var fileFlag = flag.String("f", "/dev/stdin", "File to read data from")
 var cpuProfileFlag = flag.String("p", "", "write cpu profile to file")
 var memProfileFlag = flag.String("m", "", "write mem profile to file on SIGUSR2")
+var logDebugLevel = flag.Bool("d", false, "enable process debugging logs")
 var profServer = flag.Bool("s", false, fmt.Sprintf("start a pprof server at %s", pprofServer))
 var dirFlag dirFlagType
 
@@ -202,12 +205,19 @@ func createProfileFile(name string) *os.File {
 	return f
 }
 
-func cpuProfile() *os.File {
+func enableCPUProfile() bool {
 	if *cpuProfileFlag == "" {
-		return nil
+		return false
 	}
 
-	return createProfileFile(*cpuProfileFlag)
+	f := createProfileFile(*cpuProfileFlag)
+
+	if err := pprof.StartCPUProfile(f); err != nil {
+		fmt.Fprintf(os.Stderr, "could not start cpu profile: %v\n", err)
+		return false
+	}
+
+	return true
 }
 
 func memProfile() *os.File {
@@ -246,18 +256,44 @@ func runPprofServer(exit chan error) {
 	}
 }
 
+// logd debug logging formatter for logrus
+type logFormatter struct{}
+
+func (f *logFormatter) Format(e *log.Entry) ([]byte, error) {
+	log := logging.NewLog()
+	log.Message = e.Message
+	log.Level = e.Level.String()
+	log.Set(logging.KeyTimestamp, e.Time.Format("2006-01-02 15:04:05.000"))
+
+	for k, v := range e.Data {
+		log.Set(k, fmt.Sprintf("%v", v))
+	}
+
+	return []byte(fmt.Sprintf("%s\n", log.String())), nil
+}
+
+func initLogging() {
+	log.SetOutput(os.Stderr)
+	log.SetFormatter(&logFormatter{})
+
+	if *logDebugLevel {
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(log.WarnLevel)
+	}
+}
+
 func main() {
 	var err error
 	var l *lua.Sandbox
 
-	flag.Var(&dirFlag, "d", "Monitor directory recursively, ingesting all the new data written to files. Overrides -f flag")
+	flag.Var(&dirFlag, "r", "Monitor directory recursively, ingesting all the new data written to files. Overrides -f flag")
 	flag.Parse()
 	script := validateFlags()
 
-	if f := cpuProfile(); f != nil {
-		if err = pprof.StartCPUProfile(f); err != nil {
-			fmt.Fprintf(os.Stderr, "could not start cpu profile: %v\n", err)
-		}
+	initLogging()
+
+	if enableCPUProfile() {
 		defer pprof.StopCPUProfile()
 	}
 
