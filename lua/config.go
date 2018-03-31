@@ -12,6 +12,7 @@ const (
 	luaConfigTick              = "tick"
 	luaConfigProtected         = "protected"
 	luaConfigHTTPConcurrency   = "http.concurrency"
+	luaConfigHTTPTimeout       = "http.timeout"
 	luaConfigHTTPChannelBuffer = "http.channel_buffer"
 )
 
@@ -19,5 +20,6 @@ var availableConfigKeys = []string{
 	luaConfigTick,
 	luaConfigProtected,
 	luaConfigHTTPConcurrency,
+	luaConfigHTTPTimeout,
 	luaConfigHTTPChannelBuffer,
 }

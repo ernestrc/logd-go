@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	stdHttp "net/http"
+	"time"
 
 	lua "github.com/Shopify/go-lua"
 	"github.com/ernestrc/logd/http"
@@ -86,6 +87,15 @@ func luaHTTPPost(l *lua.State) int {
 		panic("unreachable")
 	}
 	return 0
+}
+
+func (l *Sandbox) setHTTPTimeout(timeoutStr string) (err error) {
+	var timeout time.Duration
+	if timeout, err = time.ParseDuration(timeoutStr); err != nil {
+		return
+	}
+	l.httpConfig.Timeout = timeout
+	return
 }
 
 func (l *Sandbox) setHTTPChannelBuffer(c int) (err error) {

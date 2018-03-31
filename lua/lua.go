@@ -290,7 +290,7 @@ func (l *Sandbox) errorHandlerDefined() bool {
 
 func (l *Sandbox) initHTTP() (err error) {
 	l.httpErrors = make(chan http.Error)
-	if l.http, err = http.NewClient(l.httpErrors); err != nil {
+	if l.http, err = http.NewClient(l.httpConfig, l.httpErrors); err != nil {
 		return
 	}
 	go l.pollHTTPErrors()

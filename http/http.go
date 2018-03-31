@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -28,16 +29,20 @@ type AsyncClient struct {
 type Config struct {
 	Concurrency int
 	ChanBuffer  int
+	Timeout     time.Duration
 }
 
 type request struct {
 	*http.Request
 	time.Time
-	ctx *log.Entry
+	ctx        *log.Entry
+	cancelFunc context.CancelFunc // not used for now
 }
 
+const defaultTimeout = 5 * 1000 * 1000 * 1000 // 5s in ns
+
 // DefaultConfig is a client config with sane defaults
-var DefaultConfig = Config{Concurrency: 4, ChanBuffer: 100}
+var DefaultConfig = Config{Concurrency: 4, ChanBuffer: 100, Timeout: defaultTimeout}
 
 func validateConfiguration(cfg *Config) (err error) {
 	if cfg == nil {
@@ -78,10 +83,14 @@ func postRequest(client *http.Client, req *request) error {
 
 func poster(id int, reqchan chan *request, errorchan chan<- Error, quitchan chan struct{}) {
 	var client http.Client
+	log.WithFields(log.Fields{
+		"tag":      "HttpWorkerStart",
+		"workerId": id,
+	}).Debug()
 	for req := range reqchan {
 		req.ctx.WithFields(log.Fields{
-			"tag":    "HttpPostAttempt",
-			"worker": id,
+			"tag":      "HttpPostAttempt",
+			"workerId": id,
 		}).Debug()
 		err := postRequest(&client, req)
 		duration := time.Now().UnixNano() - req.Time.UnixNano()
@@ -101,14 +110,18 @@ func poster(id int, reqchan chan *request, errorchan chan<- Error, quitchan chan
 			}).Debug()
 		}
 	}
+	log.WithFields(log.Fields{
+		"tag":      "HttpWorkerStop",
+		"workerId": id,
+	}).Debug()
 	quitchan <- struct{}{}
 }
 
 // NewClient allocates enough space to store an AsyncClient and initializes it.
 // If configuration is nil a default one will be used.
-func NewClient(errorchan chan<- Error) (a *AsyncClient, err error) {
+func NewClient(cfg *Config, errorchan chan<- Error) (a *AsyncClient, err error) {
 	a = new(AsyncClient)
-	if err = a.Init(nil, errorchan); err != nil {
+	if err = a.Init(cfg, errorchan); err != nil {
 		a = nil
 		return
 	}
@@ -153,18 +166,23 @@ func (a *AsyncClient) Init(cfg *Config, errorchan chan<- Error) (err error) {
 	return
 }
 
-func newPostRequest(ctx *log.Entry, url, contentType, payload string) (*request, error) {
+func (a *AsyncClient) newPostRequest(logEntry *log.Entry, url, contentType, payload string) (*request, error) {
 	time := time.Now()
-	req, err := http.NewRequest("POST", url, strings.NewReader(payload))
+	httpReq, err := http.NewRequest("POST", url, strings.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Content-Type", contentType)
+	httpReq.Header.Add("Content-Type", contentType)
+
+	// add HTTP timeout
+	httpCtx, cancelFunc := context.WithTimeout(context.Background(), a.cfg.Timeout)
+	httpReq = httpReq.WithContext(httpCtx)
 
 	return &request{
-		req,
+		httpReq,
 		time,
-		ctx,
+		logEntry,
+		cancelFunc,
 	}, nil
 }
 
@@ -188,7 +206,7 @@ func (a *AsyncClient) Post(url string, payload string, contentType string, affin
 	ctx.Debug()
 
 	var req *request
-	if req, err = newPostRequest(ctx, url, contentType, payload); err != nil {
+	if req, err = a.newPostRequest(ctx, url, contentType, payload); err != nil {
 		return
 	}
 

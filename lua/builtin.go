@@ -140,6 +140,8 @@ func luaSetConfig(l *lua.State) int {
 		sandbox.setTick(getArgInt(l, 2, luaNameConfigFn+"#"+luaConfigTick))
 	case luaConfigHTTPConcurrency:
 		err = sandbox.setHTTPConcurrency(getArgInt(l, 2, luaNameConfigFn+"#"+luaConfigHTTPConcurrency))
+	case luaConfigHTTPTimeout:
+		err = sandbox.setHTTPTimeout(getArgString(l, 2, luaNameConfigFn+"#"+luaConfigHTTPTimeout))
 	case luaConfigHTTPChannelBuffer:
 		err = sandbox.setHTTPChannelBuffer(getArgInt(l, 2, luaNameConfigFn+"#"+luaConfigHTTPChannelBuffer))
 	default:
