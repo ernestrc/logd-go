@@ -42,6 +42,14 @@ func getArgString(l *lua.State, i int, fn string) string {
 	return arg
 }
 
+func getOptionalArgInt(l *lua.State, i, def int, fn string) int {
+	arg, ok := l.ToInteger(i)
+	if !ok {
+		return def
+	}
+	return arg
+}
+
 func getArgBool(l *lua.State, i int, fn string) bool {
 	arg := l.ToBoolean(i)
 	if !l.IsBoolean(i) {
@@ -62,12 +70,12 @@ func getArgInt(l *lua.State, i int, fn string) int {
 	return arg
 }
 
-func getStateSandbox(l *lua.State, i int) *Sandbox {
+func getStateSandbox(l *lua.State) *Sandbox {
 	l.Global(luaNameSandboxContext)
-	sandbox, ok := l.ToUserData(i).(*Sandbox)
+	sandbox, ok := l.ToUserData(-1).(*Sandbox)
 	if !ok {
 		panic(fmt.Errorf("corrupted %s internal parameter: found %s",
-			luaNameSandboxContext, l.TypeOf(i)))
+			luaNameSandboxContext, l.TypeOf(-1)))
 	}
 	return sandbox
 }
@@ -122,25 +130,27 @@ func luaGetLogProperty(l *lua.State) (i int) {
 // lua signature is function config_set (key, value)
 func luaSetConfig(l *lua.State) int {
 	key := getArgString(l, 1, luaNameConfigFn)
-	sandbox := getStateSandbox(l, 3)
+	sandbox := getStateSandbox(l)
+	var err error
 
 	switch key {
 	case luaConfigProtected:
-		err := sandbox.setProtected(getArgBool(l, 2, luaNameConfigFn+"#"+luaConfigProtected))
-		if err != nil {
-			panic(err)
-		}
+		err = sandbox.setProtected(getArgBool(l, 2, luaNameConfigFn+"#"+luaConfigProtected))
 	case luaConfigTick:
 		sandbox.setTick(getArgInt(l, 2, luaNameConfigFn+"#"+luaConfigTick))
 	case luaConfigHTTPConcurrency:
-		sandbox.setHTTPConcurrency(getArgInt(l, 2, luaNameConfigFn+"#"+luaConfigHTTPConcurrency))
+		err = sandbox.setHTTPConcurrency(getArgInt(l, 2, luaNameConfigFn+"#"+luaConfigHTTPConcurrency))
 	case luaConfigHTTPChannelBuffer:
-		sandbox.setHTTPChannelBuffer(getArgInt(l, 2, luaNameConfigFn+"#"+luaConfigHTTPChannelBuffer))
+		err = sandbox.setHTTPChannelBuffer(getArgInt(l, 2, luaNameConfigFn+"#"+luaConfigHTTPChannelBuffer))
 	default:
 		if !sandbox.setKafkaConfig(key, l.ToValue(2)) {
-			panic(fmt.Errorf("unknown config key in call to `%s`: '%s'. Available keys: %v",
-				luaNameConfigFn, key, availableConfigKeys))
+			err = fmt.Errorf("unknown config key in call to `%s`: '%s'. Available keys: %v",
+				luaNameConfigFn, key, availableConfigKeys)
 		}
+	}
+	if err != nil {
+		lua.Errorf(l, "%s: %s", luaNameConfigFn, err)
+		panic("unreachable")
 	}
 	return 0
 }

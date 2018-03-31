@@ -6,6 +6,10 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
+
+	uuid "github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 // AsyncClient is an HTTP client which submits requests asynchronously and concurrently.
@@ -15,7 +19,7 @@ type AsyncClient struct {
 	cfg Config
 	// used to synchronize flush and new request submits
 	lock      sync.Mutex
-	reqchan   chan *http.Request
+	reqchan   []chan *request
 	errorchan chan<- Error
 	quitchan  chan struct{}
 }
@@ -26,17 +30,39 @@ type Config struct {
 	ChanBuffer  int
 }
 
+type request struct {
+	*http.Request
+	time.Time
+	ctx *log.Entry
+}
+
 // DefaultConfig is a client config with sane defaults
 var DefaultConfig = Config{Concurrency: 4, ChanBuffer: 100}
 
+func validateConfiguration(cfg *Config) (err error) {
+	if cfg == nil {
+		panic(fmt.Errorf("cannot validate nil configuration"))
+	}
+	if cfg.Concurrency < 1 {
+		err = fmt.Errorf("config error: min http concurrency is 1")
+		return
+	}
+	if cfg.ChanBuffer < 1 {
+		err = fmt.Errorf("config error: min http channel buffer is 1")
+		return
+	}
+
+	return
+}
+
 // Error is an HTTP request error. This includes both connectivity errors and non-2XX responses.
 type Error struct {
-	Request *http.Request
+	Request *request
 	Err     error
 }
 
-func postRequest(client *http.Client, req *http.Request) error {
-	res, err := client.Do(req)
+func postRequest(client *http.Client, req *request) error {
+	res, err := client.Do(req.Request)
 	if err != nil {
 		return err
 	}
@@ -50,13 +76,29 @@ func postRequest(client *http.Client, req *http.Request) error {
 	return fmt.Errorf("request to '%s' status: %+v", req.URL.String(), res.Status)
 }
 
-func poster(id int, reqchan chan *http.Request, errorchan chan<- Error, quitchan chan struct{}) {
+func poster(id int, reqchan chan *request, errorchan chan<- Error, quitchan chan struct{}) {
 	var client http.Client
 	for req := range reqchan {
-		if err := postRequest(&client, req); err != nil {
+		req.ctx.WithFields(log.Fields{
+			"tag":    "HttpPostAttempt",
+			"worker": id,
+		}).Debug()
+		err := postRequest(&client, req)
+		duration := time.Now().UnixNano() - req.Time.UnixNano()
+		if err != nil {
 			if errorchan != nil {
 				errorchan <- Error{req, err}
 			}
+			req.ctx.WithFields(log.Fields{
+				"tag":      "HttpPostFailure",
+				"error":    err,
+				"duration": duration,
+			}).Debug()
+		} else {
+			req.ctx.WithFields(log.Fields{
+				"tag":      "HttpPostSuccess",
+				"duration": duration,
+			}).Debug()
 		}
 	}
 	quitchan <- struct{}{}
@@ -64,16 +106,25 @@ func poster(id int, reqchan chan *http.Request, errorchan chan<- Error, quitchan
 
 // NewClient allocates enough space to store an AsyncClient and initializes it.
 // If configuration is nil a default one will be used.
-func NewClient(errorchan chan<- Error) *AsyncClient {
-	w := new(AsyncClient)
-	w.Init(nil, errorchan)
-	return w
+func NewClient(errorchan chan<- Error) (a *AsyncClient, err error) {
+	a = new(AsyncClient)
+	if err = a.Init(nil, errorchan); err != nil {
+		a = nil
+		return
+	}
+	return
 }
 
-func (w *AsyncClient) initWorkers() {
-	w.reqchan = make(chan *http.Request, w.cfg.ChanBuffer)
-	for i := 0; i < w.cfg.Concurrency; i++ {
-		go poster(i, w.reqchan, w.errorchan, w.quitchan)
+// Concurrency returns the configured max number of concurrent requests
+func (a *AsyncClient) Concurrency() int {
+	return a.cfg.Concurrency
+}
+
+func (a *AsyncClient) initWorkers() {
+	a.reqchan = make([]chan *request, a.cfg.Concurrency)
+	for i := 0; i < a.cfg.Concurrency; i++ {
+		a.reqchan[i] = make(chan *request, a.cfg.ChanBuffer)
+		go poster(i, a.reqchan[i], a.errorchan, a.quitchan)
 	}
 }
 
@@ -81,60 +132,114 @@ func (w *AsyncClient) initWorkers() {
 // Calling Init after it is initialized will call Close first, flushing all the pending data, and re-initialize it.
 // After calling this method, changes to cfg will not have any effect. If new configuration is to be used, call Init again with
 // the updated configuration and client will updated.
-func (w *AsyncClient) Init(cfg *Config, errorchan chan<- Error) {
-	if w.reqchan != nil {
-		w.Close()
+func (a *AsyncClient) Init(cfg *Config, errorchan chan<- Error) (err error) {
+	if a.reqchan != nil {
+		if err = a.Close(); err != nil {
+			return
+		}
 	}
 	if cfg == nil {
-		w.cfg = DefaultConfig
+		a.cfg = DefaultConfig
 	} else {
-		w.cfg = *cfg
+		a.cfg = *cfg
 	}
-	w.errorchan = errorchan
-	w.quitchan = make(chan struct{})
-	w.initWorkers()
-}
-
-// Post makes an HTTP post to the given url and sets the Content-Type header accordingly
-func (w *AsyncClient) Post(url string, payload string, contentType string) (n int, err error) {
-	var req *http.Request
-
-	if req, err = http.NewRequest("POST", url, strings.NewReader(payload)); err != nil {
+	if err = validateConfiguration(&a.cfg); err != nil {
 		return
 	}
-	req.Header.Add("Content-Type", contentType)
+	a.errorchan = errorchan
+	a.quitchan = make(chan struct{})
+	a.initWorkers()
 
-	if w.reqchan == nil {
-		panic("called Write before writer was initialized or after Close was called")
-	}
-
-	w.lock.Lock()
-	defer w.lock.Unlock()
-	w.reqchan <- req
 	return
 }
 
-func (w *AsyncClient) Flush() {
-	w.lock.Lock()
-	defer w.lock.Unlock()
-	w.stopWorkers()
-	w.initWorkers()
+func newPostRequest(ctx *log.Entry, url, contentType, payload string) (*request, error) {
+	time := time.Now()
+	req, err := http.NewRequest("POST", url, strings.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Content-Type", contentType)
+
+	return &request{
+		req,
+		time,
+		ctx,
+	}, nil
 }
 
-func (w *AsyncClient) stopWorkers() {
-	close(w.reqchan)
-	for i := 0; i < w.cfg.Concurrency; i++ {
-		<-w.quitchan
+// Post makes an HTTP post to the given url and sets the Content-Type header accordingly
+func (a *AsyncClient) Post(url string, payload string, contentType string, affinity int) (err error) {
+	maxAffinity := a.cfg.Concurrency - 1
+	if affinity > maxAffinity {
+		err = fmt.Errorf("Post: cannot pass affinity greater than %d (only %d channels available)", maxAffinity, a.cfg.Concurrency)
+		return
+	}
+
+	traceID := uuid.New().String()
+	ctx := log.WithFields(log.Fields{
+		"tag":      "HttpPostSubmit",
+		"url":      url,
+		"class":    "AsyncHTTPClient",
+		"affinity": affinity,
+		"traceId":  traceID,
+	})
+
+	ctx.Debug()
+
+	var req *request
+	if req, err = newPostRequest(ctx, url, contentType, payload); err != nil {
+		return
+	}
+
+	if a.reqchan == nil {
+		panic(fmt.Errorf("called Write before writer was initialized or after Close was called"))
+	}
+
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	if affinity >= 0 {
+		a.reqchan[affinity] <- req
+		return
+	}
+
+	// find an available channel
+	for i := 0; i < a.cfg.Concurrency; i++ {
+		select {
+		case a.reqchan[i] <- req:
+			return
+		default:
+		}
+	}
+
+	// if not just block caller
+	a.reqchan[0] <- req
+	return
+}
+
+// Flush all pending I/O operations
+func (a *AsyncClient) Flush() {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	a.stopWorkers()
+	a.initWorkers()
+}
+
+func (a *AsyncClient) stopWorkers() {
+	for i := 0; i < a.cfg.Concurrency; i++ {
+		close(a.reqchan[i])
+		<-a.quitchan
 	}
 }
 
 // Close will block until all data has been written.
 // In order to use again this client instance Init must be used to initialize its resources
-func (w *AsyncClient) Close() error {
+func (a *AsyncClient) Close() error {
 	// wait for goroutines to finish the work
-	w.stopWorkers()
-	close(w.quitchan)
+	a.stopWorkers()
+	close(a.quitchan)
 	// marks client as uninitialized
-	w.reqchan = nil
+	a.reqchan = nil
 	return nil
 }

@@ -33,7 +33,7 @@ func (d *DirReader) Init() (err error) {
 
 func (d *DirReader) addFile(name string) (err error) {
 	if _, ok := d.files[name]; ok {
-		// panic(fmt.Sprintf("tried to add file twice: %s", name))
+		// panic(fmt.Errorf("tried to add file twice: %s", name))
 		return
 	}
 	var f *os.File

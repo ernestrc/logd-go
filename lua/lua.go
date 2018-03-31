@@ -150,7 +150,9 @@ func (l *Sandbox) runTicker() {
 // NewSandbox allocates storage and initializes a new Sandbox
 func NewSandbox(scriptPath string) (l *Sandbox, err error) {
 	l = new(Sandbox)
-	err = l.Init(scriptPath)
+	if err = l.Init(scriptPath); err != nil {
+		l = nil
+	}
 	return
 }
 
@@ -225,7 +227,7 @@ func (l *Sandbox) callProtectedOnTick() (err error) {
 		return
 	}
 
-	l.callProtected(&logging.Log{}, 0, 0, luaNameOnTickFn)
+	err = l.callProtected(&logging.Log{}, 0, 0, luaNameOnTickFn)
 	return
 }
 
@@ -274,7 +276,7 @@ func (l *Sandbox) ProtectedCallOnLog(lg *logging.Log) (err error) {
 		return
 	}
 
-	l.callProtected(lg, 1, 0, luaNameOnLogFn)
+	err = l.callProtected(lg, 1, 0, luaNameOnLogFn)
 
 	return
 }
@@ -286,10 +288,14 @@ func (l *Sandbox) errorHandlerDefined() bool {
 	return l.state.IsFunction(-1)
 }
 
-func (l *Sandbox) initHTTP() {
+func (l *Sandbox) initHTTP() (err error) {
 	l.httpErrors = make(chan http.Error)
-	l.http = http.NewClient(l.httpErrors)
+	if l.http, err = http.NewClient(l.httpErrors); err != nil {
+		return
+	}
 	go l.pollHTTPErrors()
+
+	return
 }
 
 func (l *Sandbox) initKafka() (err error) {

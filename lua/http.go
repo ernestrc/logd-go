@@ -65,10 +65,14 @@ func luaHTTPPost(l *lua.State) int {
 	url := getArgString(l, 1, luaNameHTTPPostFn)
 	payload := getArgString(l, 2, luaNameHTTPPostFn)
 	contentType := getArgString(l, 3, luaNameHTTPPostFn)
-	sandbox := getStateSandbox(l, 4)
+	affinity := getOptionalArgInt(l, 4, -1, luaNameHTTPPostFn)
+	sandbox := getStateSandbox(l)
 
 	if sandbox.http == nil {
-		sandbox.initHTTP()
+		if err := sandbox.initHTTP(); err != nil {
+			lua.Errorf(l, "http initialization error: %s", err)
+			panic("unreachable")
+		}
 	}
 
 	// Avoid resource contention.
@@ -76,25 +80,32 @@ func luaHTTPPost(l *lua.State) int {
 	// and the http requests channel is full, Post will block and thus create a deadlock
 	sandbox.luaLock.Unlock()
 	defer sandbox.luaLock.Lock()
-	_, err := sandbox.http.Post(url, payload, contentType)
+	err := sandbox.http.Post(url, payload, contentType, affinity)
 	if err != nil {
-		panic(err)
+		lua.Errorf(l, "%s", err)
+		panic("unreachable")
 	}
 	return 0
 }
 
-func (l *Sandbox) setHTTPChannelBuffer(c int) {
+func (l *Sandbox) setHTTPChannelBuffer(c int) (err error) {
 	l.httpConfig.ChanBuffer = c
 	if l.http != nil {
-		l.http.Init(l.httpConfig, l.httpErrors)
+		if err = l.http.Init(l.httpConfig, l.httpErrors); err != nil {
+			return
+		}
 	}
+	return
 }
 
-func (l *Sandbox) setHTTPConcurrency(c int) {
+func (l *Sandbox) setHTTPConcurrency(c int) (err error) {
 	l.httpConfig.Concurrency = c
 	if l.http != nil {
-		l.http.Init(l.httpConfig, l.httpErrors)
+		if err = l.http.Init(l.httpConfig, l.httpErrors); err != nil {
+			return
+		}
 	}
+	return
 }
 
 func (l *Sandbox) callOnHTTPError(e http.Error) {

@@ -82,7 +82,7 @@ func luaKafkaMessage(l *lua.State) int {
 // lua signature is function kafka_produce (msgptr)
 func luaKafkaProduce(l *lua.State) int {
 	message := getArgKafkaMessage(l, 1, luaNameKafkaProduceFn)
-	sandbox := getStateSandbox(l, 2)
+	sandbox := getStateSandbox(l)
 
 	if sandbox.kafka == nil {
 		if err := sandbox.initKafka(); err != nil {
