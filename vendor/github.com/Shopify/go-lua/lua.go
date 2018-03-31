@@ -913,8 +913,10 @@ func (l *State) PushFString(format string, args ...interface{}) string {
 		case 's':
 			if args[i] == nil {
 				l.push("(null)")
+			} else if s, ok := args[i].(string); ok {
+				l.push(s)
 			} else {
-				l.push(args[i].(string))
+				l.push(fmt.Sprintf("%s", args[i]))
 			}
 			i++
 		case 'c':
