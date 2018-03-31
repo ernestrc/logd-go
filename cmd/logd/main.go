@@ -16,11 +16,13 @@ import (
 
 	"github.com/ernestrc/logd/logging"
 	"github.com/ernestrc/logd/lua"
+	"github.com/natefinch/lumberjack"
 
 	log "github.com/sirupsen/logrus"
 )
 
 const pprofServer = "localhost:6060"
+const defaultDebugFile = "/dev/stderr"
 
 type dirFlagType []string
 
@@ -43,7 +45,8 @@ var fullBenchFlag = flag.String("F", "", "Benchmark full processing pipeline (lo
 var fileFlag = flag.String("f", "/dev/stdin", "File to read data from")
 var cpuProfileFlag = flag.String("p", "", "write cpu profile to file")
 var memProfileFlag = flag.String("m", "", "write mem profile to file on SIGUSR2")
-var logDebugLevel = flag.Bool("d", false, "enable process debugging logs")
+var logDebugLevel = flag.Bool("d", false, "enable debug logs")
+var logDebugFile = flag.String("o", defaultDebugFile, "write logs to file")
 var profServer = flag.Bool("s", false, fmt.Sprintf("start a pprof server at %s", pprofServer))
 var dirFlag dirFlagType
 
@@ -273,13 +276,23 @@ func (f *logFormatter) Format(e *log.Entry) ([]byte, error) {
 }
 
 func initLogging() {
-	log.SetOutput(os.Stderr)
 	log.SetFormatter(&logFormatter{})
 
 	if *logDebugLevel {
 		log.SetLevel(log.DebugLevel)
 	} else {
 		log.SetLevel(log.WarnLevel)
+	}
+
+	if *logDebugFile != defaultDebugFile {
+		log.SetOutput(&lumberjack.Logger{
+			Filename:   *logDebugFile,
+			MaxSize:    100, // megabytes
+			MaxAge:     28,  //days
+			MaxBackups: 10,
+		})
+	} else {
+		log.SetOutput(os.Stderr)
 	}
 }
 
