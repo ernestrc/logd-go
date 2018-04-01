@@ -63,28 +63,6 @@ func (l *Sandbox) setTick(tick int) {
 	go l.restartTicker()
 }
 
-var logdAPI = []lua.RegistryFunction{
-	/* module API */
-	{Name: luaNameHTTPGetFn, Function: luaHTTPGet},
-	{Name: luaNameHTTPPostFn, Function: luaHTTPPost},
-	{Name: luaNameConfigFn, Function: luaSetConfig},
-	{Name: luaNameGetFn, Function: luaGetLogProperty},
-	{Name: luaNameSetFn, Function: luaSetLogProperty},
-	{Name: luaNameRemoveFn, Function: luaRemoveLogProperty},
-	{Name: luaNameResetFn, Function: luaResetLog},
-	{Name: luaNameLogStringFn, Function: luaLogString},
-	{Name: luaNameLogJSONFn, Function: luaLogJSON},
-	{Name: luaNameKafkaOffsetFn, Function: luaKafkaOffset},
-	{Name: luaNameKafkaMessageFn, Function: luaKafkaMessage},
-	{Name: luaNameKafkaProduceFn, Function: luaKafkaProduce},
-	/* hooks are left undefined
-	{Name: luaNameOnLogFn, Function: nil},
-	{Name: luaNameOnTickFn, Function: nil},
-	{Name: luaNameOnHTTPErrorFn, Function: nil},
-	{Name: luaNameOnKafkaReportFn, Function: nil},
-	*/
-}
-
 // opens the logd library
 func luaLogdOpen(l *lua.State) int {
 	lua.NewLibrary(l, logdAPI)

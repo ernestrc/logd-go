@@ -281,7 +281,7 @@ func initLogging() {
 	if *logDebugLevel {
 		log.SetLevel(log.DebugLevel)
 	} else {
-		log.SetLevel(log.WarnLevel)
+		log.SetLevel(log.InfoLevel)
 	}
 
 	if *logDebugFile != defaultDebugFile {

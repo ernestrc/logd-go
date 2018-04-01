@@ -5,6 +5,7 @@ import (
 
 	lua "github.com/Shopify/go-lua"
 	"github.com/ernestrc/logd/logging"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -20,7 +21,31 @@ const (
 	luaNameResetFn        = "log_reset"
 	luaNameLogStringFn    = "log_string"
 	luaNameLogJSONFn      = "log_json"
+	luaNameDebugFn        = "debug"
 )
+
+var logdAPI = []lua.RegistryFunction{
+	/* module API */
+	{Name: luaNameHTTPGetFn, Function: luaHTTPGet},
+	{Name: luaNameHTTPPostFn, Function: luaHTTPPost},
+	{Name: luaNameConfigFn, Function: luaSetConfig},
+	{Name: luaNameGetFn, Function: luaGetLogProperty},
+	{Name: luaNameSetFn, Function: luaSetLogProperty},
+	{Name: luaNameRemoveFn, Function: luaRemoveLogProperty},
+	{Name: luaNameResetFn, Function: luaResetLog},
+	{Name: luaNameLogStringFn, Function: luaLogString},
+	{Name: luaNameLogJSONFn, Function: luaLogJSON},
+	{Name: luaNameKafkaOffsetFn, Function: luaKafkaOffset},
+	{Name: luaNameKafkaMessageFn, Function: luaKafkaMessage},
+	{Name: luaNameKafkaProduceFn, Function: luaKafkaProduce},
+	{Name: luaNameDebugFn, Function: luaDebug},
+	/* hooks are left undefined
+	{Name: luaNameOnLogFn, Function: nil},
+	{Name: luaNameOnTickFn, Function: nil},
+	{Name: luaNameOnHTTPErrorFn, Function: nil},
+	{Name: luaNameOnKafkaReportFn, Function: nil},
+	*/
+}
 
 func getArgLogPtr(l *lua.State, i int, fn string) *logging.Log {
 	log, ok := l.ToUserData(i).(*logging.Log)
@@ -124,6 +149,36 @@ func luaGetLogProperty(l *lua.State) (i int) {
 	}
 	l.PushString(value)
 	return 1
+}
+
+func luaDebug(l *lua.State) int {
+	// arg can be a string with a message, or a table with the fields to log
+	switch l.TypeOf(1) {
+	case lua.TypeString:
+		s, _ := l.ToString(1)
+		log.Info(s)
+	case lua.TypeTable:
+		fields := make(map[string]interface{})
+		l.PushNil()
+
+		for l.Next(1) {
+			k, ok := l.ToString(-2)
+			if !ok {
+				panic(fmt.Errorf("table key must be a string in call to builtin '%s': found %s",
+					luaNameDebugFn, l.TypeOf(-2)))
+			}
+			v := l.ToValue(-1)
+			fields[k] = v
+			l.Pop(1)
+		}
+		log.WithFields(log.Fields(fields)).Info()
+	default:
+		panic(fmt.Errorf(
+			"%d argument must be a string or a table in call to builtin '%s' function: found %s",
+			1, luaNameDebugFn, l.TypeOf(1)))
+	}
+
+	return 0
 }
 
 // luaSetConfig sets a property in the configuration to the given value.

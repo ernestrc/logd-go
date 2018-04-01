@@ -9,11 +9,12 @@ local tick = 100
 function logd.on_tick ()
 	local ntick = tick * 2
 	logd.config_set("tick", ntick)
-	print(string.format("next tick: %d", ntick))
+
+	logd.debug({ next_tick = ntick, msg = "triggered!" })
 end
 
 function logd.on_log(logptr)
-	print(logd.log_string(logptr))
+	logd.debug(string.format("processed log: %s", logd.log_string(logptr)))
 end
 
 -- example usage of "config_set" builtin
