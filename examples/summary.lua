@@ -7,10 +7,10 @@ local logd = require("logd")
 local tick = 100
 
 function logd.on_tick ()
-	local ntick = tick * 2
-	logd.config_set("tick", ntick)
+	tick = tick * 2
+	logd.config_set("tick", tick)
 
-	logd.debug({ next_tick = ntick, msg = "triggered!" })
+	logd.debug({ next_tick = tick, msg = "triggered!" })
 end
 
 function logd.on_log(logptr)
