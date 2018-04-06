@@ -117,19 +117,17 @@ func readNumber(l *State, f *os.File) (err error) {
 func read(l *State, f *os.File, argIndex int) int {
 	resultCount := 0
 	var err error
+	var b []byte
 	if argCount := l.Top() - 1; argCount == 0 {
-		//		err = readLineHelper(l, f, true)
+		b, err = ioutil.ReadAll(f)
 		resultCount = argIndex + 1
 	} else {
-		// TODO
+		panic("TODO: *all *line not implemented yet, use with no args")
 	}
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return FileResult(l, err, "")
 	}
-	if err == io.EOF {
-		l.Pop(1)
-		l.PushNil()
-	}
+	l.PushString(string(b))
 	return resultCount - argIndex
 }
 
