@@ -41,6 +41,7 @@ var logdAPI = []lua.RegistryFunction{
 	{Name: luaNameDebugFn, Function: luaDebug},
 	/* hooks are left undefined
 	{Name: luaNameOnLogFn, Function: nil},
+	{Name: luaNameOnSignalFn, Function: nil},
 	{Name: luaNameOnTickFn, Function: nil},
 	{Name: luaNameOnHTTPErrorFn, Function: nil},
 	{Name: luaNameOnKafkaReportFn, Function: nil},

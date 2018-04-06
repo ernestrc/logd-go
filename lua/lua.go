@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"syscall"
 	"time"
 
 	lua "github.com/Shopify/go-lua"
@@ -21,10 +22,45 @@ const (
 	/* lua functions provided by client script */
 	luaNameOnLogFn         = "on_log"
 	luaNameOnErrorFn       = "on_error"
+	luaNameOnSignalFn      = "on_signal"
 	luaNameOnTickFn        = "on_tick"
 	luaNameOnHTTPErrorFn   = "on_http_error"
 	luaNameOnKafkaReportFn = "on_kafka_report"
 )
+
+var signals = map[int]string{
+	0x6:  "SIGABRT",
+	0xe:  "SIGALRM",
+	0x7:  "SIGBUS",
+	0x11: "SIGCHLD",
+	0x12: "SIGCONT",
+	0x8:  "SIGFPE",
+	0x1:  "SIGHUP",
+	0x4:  "SIGILL",
+	0x2:  "SIGINT",
+	0x1d: "SIGIO",
+	0x9:  "SIGKILL",
+	0xd:  "SIGPIPE",
+	0x1b: "SIGPROF",
+	0x1e: "SIGPWR",
+	0x3:  "SIGQUIT",
+	0xb:  "SIGSEGV",
+	0x10: "SIGSTKFLT",
+	0x13: "SIGSTOP",
+	0x1f: "SIGSYS",
+	0xf:  "SIGTERM",
+	0x5:  "SIGTRAP",
+	0x14: "SIGTSTP",
+	0x15: "SIGTTIN",
+	0x16: "SIGTTOU",
+	0x17: "SIGURG",
+	0xa:  "SIGUSR1",
+	0xc:  "SIGUSR2",
+	0x1a: "SIGVTALRM",
+	0x1c: "SIGWINCH",
+	0x18: "SIGXCPU",
+	0x19: "SIGXFSZ",
+}
 
 // Sandbox represents a lua VM wich exposes a series of builtin functions
 // to perform I/O operations and transformations over logging.Log structures.
@@ -209,6 +245,25 @@ func (l *Sandbox) callProtectedOnTick() (err error) {
 	return
 }
 
+// CallOnSignal allows the hosted lua script to handle a signal received by this Sandbox.
+// There's no guarantees about the state of the program after the signal is handed to the script.
+// In the case of SIGUSR1 and SIGUSR2, the signals are first handled by the script.
+func (l *Sandbox) CallOnSignal(signal os.Signal) {
+	l.state.Global(luaNameLogdModule)
+	defer l.state.Pop(1)
+
+	l.state.Field(-1, luaNameOnSignalFn)
+	if !l.state.IsFunction(-1) {
+		l.state.Pop(1)
+		panic(fmt.Errorf("not defined: function %s.%s(signal)",
+			luaNameLogdModule, luaNameOnSignalFn))
+	}
+
+	sigCode := signal.(syscall.Signal)
+	l.state.PushString(signals[int(sigCode)])
+	l.state.Call(1, 0)
+}
+
 func (l *Sandbox) callOnError(lg *logging.Log, err error) {
 	l.state.Global(luaNameLogdModule)
 	defer l.state.Pop(1)
@@ -259,11 +314,20 @@ func (l *Sandbox) ProtectedCallOnLog(lg *logging.Log) (err error) {
 	return
 }
 
-func (l *Sandbox) errorHandlerDefined() bool {
+func (l *Sandbox) hookDefined(name string) bool {
 	l.state.Global(luaNameLogdModule)
-	l.state.Field(-1, luaNameOnErrorFn)
+	l.state.Field(-1, name)
 	defer l.state.Pop(2)
 	return l.state.IsFunction(-1)
+}
+
+func (l *Sandbox) errorHandlerDefined() bool {
+	return l.hookDefined(luaNameOnErrorFn)
+}
+
+// SignalHandlerDefined returns true if `logd.on_signal` hook is defined by hosted script
+func (l *Sandbox) SignalHandlerDefined() bool {
+	return l.hookDefined(luaNameOnSignalFn)
 }
 
 func (l *Sandbox) initHTTP() (err error) {

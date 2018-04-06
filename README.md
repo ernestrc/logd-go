@@ -47,4 +47,3 @@ If you do not have librdkafka (v0.11.1) installed on your system and if you have
 - Add more input parsers. i.e.:
 	- https://en.wikipedia.org/wiki/Common\_Log\_Format
 - Add query API
-- Add directory monitoring flag

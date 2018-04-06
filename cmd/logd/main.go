@@ -230,26 +230,33 @@ func memProfile() *os.File {
 	return createProfileFile(*memProfileFlag)
 }
 
+func handleSignal(l *lua.Sandbox, script string, exit chan error, sig os.Signal) {
+	fmt.Fprintf(os.Stderr, "received: %s\n", sig)
+	switch sig {
+	case syscall.SIGUSR2:
+		if f := memProfile(); f != nil {
+			defer f.Close()
+			runtime.GC()
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				exit <- err
+			}
+		}
+	case syscall.SIGUSR1:
+		// reload lua state
+		if err := l.Init(script); err != nil {
+			panic(err)
+		}
+	default:
+		exit <- nil
+	}
+}
+
 func sigHandler(l *lua.Sandbox, script string, exit chan error, sig chan os.Signal) {
 	for sig := range sig {
-		fmt.Fprintf(os.Stderr, "received: %s\n", sig)
-		switch sig {
-		case syscall.SIGUSR2:
-			if f := memProfile(); f != nil {
-				defer f.Close()
-				runtime.GC()
-				if err := pprof.WriteHeapProfile(f); err != nil {
-					exit <- err
-				}
-			}
-		case syscall.SIGUSR1:
-			// reload lua state
-			if err := l.Init(script); err != nil {
-				panic(err)
-			}
-		default:
-			exit <- nil
+		if l.SignalHandlerDefined() {
+			l.CallOnSignal(sig)
 		}
+		handleSignal(l, script, exit, sig)
 	}
 }
 
