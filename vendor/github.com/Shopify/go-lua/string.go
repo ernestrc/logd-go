@@ -179,8 +179,17 @@ var stringLibrary = []RegistryFunction{
 		l.PushString(formatHelper(l, CheckString(l, 1), l.Top()))
 		return 1
 	}},
-	// {"gmatch", ...},
+	{"split", func(l *State) int {
+		s, sep := CheckString(l, 1), CheckString(l, 2)
+		l.NewTable()
+		for i, chunk := range strings.Split(s, sep) {
+			l.PushString(chunk)
+			l.SetField(3, fmt.Sprintf("%d", i+1))
+		}
+		return 1
+	}},
 	// {"gsub", ...},
+	// {"gmatch", ...},
 	{"len", func(l *State) int { l.PushInteger(len(CheckString(l, 1))); return 1 }},
 	{"lower", func(l *State) int { l.PushString(strings.ToLower(CheckString(l, 1))); return 1 }},
 	// {"match", ...},
