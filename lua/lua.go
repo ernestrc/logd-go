@@ -432,8 +432,6 @@ func (l *Sandbox) Close() {
 		l.kafka.Close()
 		l.kafka = nil
 	}
-	l.luaLock.Lock()
-	defer l.luaLock.Unlock()
 
 	l.stopTicker()
 
